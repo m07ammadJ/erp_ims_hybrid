@@ -1,0 +1,55 @@
+# Forma
+
+A Next.js ERP and inventory workspace inspired by the calm, connected feel of Notion. Built with React, TypeScript, custom CSS, Lucide icons, and bundled fonts. No external font or image services are required.
+
+## Run locally
+
+Use Node.js 24 (Node 20.9+ is supported by Next.js) and npm.
+
+```sh
+npm ci
+npm run dev
+```
+
+The development server uses port 3000. For a production build:
+
+```sh
+npm run build
+npm start
+```
+
+## What works
+
+- Dashboard with sales totals, inventory valuation, real order history charts, stock health, and activity.
+- Product creation/editing, unique SKUs, inventory search and filters, grid/table views, selection, and CSV exports.
+- Multi-line sales orders, available-stock validation, reservations, shipping, delivery, cancellation, and payment tracking.
+- Purchase orders with suppliers and expected delivery dates; receiving adds all line quantities once.
+- Customer directory with editing, search, order counts, and lifetime sales.
+- Reports with product performance, gross sales, estimated gross profit, and CSV exports.
+- Workspace pages with headings, lists, interactive checklist previews, autosave on blur, and Markdown exports.
+- Workspace settings, JSON backups, and confirmed demo reset.
+- Global search with Ctrl/⌘ K or `/`, keyboard result navigation, accessible native dialogs, and responsive mobile navigation.
+
+## Data and scope
+
+This is a functional **local prototype**, seeded with a fictional Brooklyn homeware business and October 2026 records. Data is persisted under `forma.workspace.v1` in this browser’s localStorage. No account, server database, authentication, authorization, multi-user sync, actual payment processing, or external integration is connected. Export a JSON backup before clearing browser data. The JSON export is a backup artifact; a restore/import flow is not implemented.
+
+Processing orders reserve inventory. Shipping reduces physical stock and releases the reservation. Cancelling an unpaid processing order releases its reservation. Receiving a purchase adds physical stock. Invalid transitions and repeated fulfillment/receiving are rejected in the shared domain layer.
+
+Sales represent non-cancelled order value rather than recognized accounting revenue. Inventory valuation uses current unit cost. Profit reports estimate sales less current cost and exclude taxes, shipping, and operating expenses. Purchasing is not a double-entry general ledger. A production rollout requires backend transactions, access controls, audit logging, backups, and appropriate accounting/tax rules.
+
+## Validation
+
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run test:e2e
+npm run build
+```
+
+Browser tests use `/usr/bin/chromium` when available. Otherwise install Playwright’s browser with `npx playwright install chromium`. Tests start a development server automatically, or use a server supplied by `PLAYWRIGHT_BASE_URL`. Each browser test uses an isolated context and tests real user interactions and persisted data.
+
+Code is organized into `src/lib/domain.ts` (stock/transaction rules), `src/lib/store.ts` (local persistence), and `src/components/` (workspace shell, records, forms, reports, and pages).
+
+Cloud tasks already run in an isolated checkout. Use the existing checkout; do not create a Git worktree unless explicitly requested.
