@@ -61,12 +61,34 @@ export interface Activity {
   type: "order" | "stock" | "payment" | "workspace";
   at: string;
 }
+export type BlockType =
+  | "text"
+  | "heading"
+  | "todo"
+  | "bullet"
+  | "callout"
+  | "divider"
+  | "inventory"
+  | "orders";
+export interface PageBlock {
+  id: string;
+  type: BlockType;
+  text: string;
+  checked?: boolean;
+  config?: {
+    layout?: "table" | "board";
+    filter?: string;
+    search?: string;
+    columns?: string[];
+  };
+}
 export interface Document {
   id: string;
   title: string;
   icon: string;
   content: string;
   updatedAt: string;
+  blocks?: PageBlock[];
 }
 export interface AppState {
   version: 1;
@@ -389,6 +411,43 @@ export function createDemoState(): AppState {
         content:
           "A little structure. A lot of room to grow.\n\nThis is our shared home for the way we work. Keep useful context here so everyone can move with clarity.\n\nTHIS WEEK’S PRIORITIES\n☐ Receive the Nordic Form shipment\n☐ Review low-stock items and create purchase orders\n☐ Fulfill open customer orders\n\nGOOD TO KNOW\nInventory is tracked at our Brooklyn warehouse. Processing sales orders reserve stock; shipping deducts it. Receive purchase orders to add stock.\n\nTEAM RITUALS\nMonday · Plan the week\nWednesday · Inventory review\nFriday · Celebrate the little wins",
         updatedAt: daysAgo(1),
+        blocks: [
+          {
+            id: "b-intro",
+            type: "text",
+            text: "Your products, orders, and plans — connected in one page. Shape this workspace around the way your business works.",
+          },
+          {
+            id: "b-note",
+            type: "callout",
+            text: "This is a live workspace. Open any record to edit it. Use + or type / in a text block to add a database, heading, or checklist.",
+          },
+          {
+            id: "b-stock",
+            type: "inventory",
+            text: "Inventory",
+            config: { layout: "table", filter: "all" },
+          },
+          {
+            id: "b-order",
+            type: "orders",
+            text: "Orders to fulfill",
+            config: { layout: "table", filter: "Processing" },
+          },
+          { id: "b-heading", type: "heading", text: "This week" },
+          {
+            id: "b-todo1",
+            type: "todo",
+            text: "Receive the Nordic Form shipment",
+            checked: false,
+          },
+          {
+            id: "b-todo2",
+            type: "todo",
+            text: "Review reorder points for bestsellers",
+            checked: false,
+          },
+        ],
       },
       {
         id: "d2",
@@ -404,6 +463,11 @@ export function createDemoState(): AppState {
 }
 
 export type Action =
+  | {
+      type: "adjust-stock";
+      changes: { productId: string; stock: number }[];
+      reason: string;
+    }
   | { type: "save-product"; product: Product }
   | { type: "create-order"; customerId: string; items: LineItem[] }
   | {
@@ -465,6 +529,41 @@ export function transition(state: AppState, action: Action): AppState {
     type: "workspace",
   };
   switch (action.type) {
+    case "adjust-stock": {
+      assert(action.reason.trim(), "Add a reason for the stock adjustment.");
+      assert(action.changes.length > 0, "Select at least one product.");
+      assert(
+        new Set(action.changes.map((c) => c.productId)).size ===
+          action.changes.length,
+        "Each product can only appear once.",
+      );
+      for (const change of action.changes) {
+        assert(
+          state.products.some((p) => p.id === change.productId),
+          "A product no longer exists.",
+        );
+        assert(
+          Number.isSafeInteger(change.stock) &&
+            change.stock >= 0 &&
+            change.stock <= 1e9,
+          "Stock must be a non-negative whole number up to one billion.",
+        );
+        assert(
+          change.stock >= reserved(state, change.productId),
+          `${state.products.find((p) => p.id === change.productId)?.name} has ${reserved(state, change.productId)} reserved units. Release the reservations before reducing stock further.`,
+        );
+      }
+      next.products = state.products.map((p) => {
+        const change = action.changes.find((c) => c.productId === p.id);
+        return change ? { ...p, stock: change.stock } : p;
+      });
+      activity = {
+        text: `Stock adjusted for ${action.changes.length} product${action.changes.length === 1 ? "" : "s"}`,
+        detail: action.reason.trim(),
+        type: "stock",
+      };
+      break;
+    }
     case "save-product": {
       const p = {
         ...action.product,
@@ -704,6 +803,30 @@ export function transition(state: AppState, action: Action): AppState {
     }
     case "save-document": {
       assert(action.document.title.trim(), "Give your page a title.");
+      if (action.document.blocks) {
+        assert(
+          new Set(action.document.blocks.map((b) => b.id)).size ===
+            action.document.blocks.length,
+          "Page blocks must have unique identifiers.",
+        );
+        assert(
+          action.document.blocks.every(
+            (b) =>
+              typeof b.text === "string" &&
+              [
+                "text",
+                "heading",
+                "todo",
+                "bullet",
+                "callout",
+                "divider",
+                "inventory",
+                "orders",
+              ].includes(b.type),
+          ),
+          "Unsupported page block.",
+        );
+      }
       next.documents = state.documents.some((d) => d.id === action.document.id)
         ? state.documents.map((d) =>
             d.id === action.document.id ? action.document : d,

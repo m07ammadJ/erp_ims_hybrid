@@ -9,7 +9,7 @@ const nav = async (page: Page, name: string) =>
   page.locator("aside").getByRole("link", { name, exact: true }).click();
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/#overview");
 });
 
 test("dashboard renders without client errors and links to working views", async ({
@@ -18,7 +18,7 @@ test("dashboard renders without client errors and links to working views", async
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await expect(
-    page.getByRole("heading", { name: "Your business, in view." }),
+    page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Orders to fulfill/ }),
@@ -28,9 +28,7 @@ test("dashboard renders without client errors and links to working views", async
     page.getByRole("img", { name: /Revenue over 7 days/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: /Inventory value/ }).click();
-  await expect(
-    page.getByRole("heading", { name: "A place for every product." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -47,9 +45,7 @@ test("add and edit inventory, filter it, and persist after reload", async ({
   await page.getByRole("button", { name: "Create product" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("new addition");
-  await page
-    .getByPlaceholder("Search products, SKUs, anything…")
-    .fill("TEST-009");
+  await page.getByPlaceholder("Search products or SKU…").fill("TEST-009");
   await page.getByRole("button", { name: /Test Work Lamp TEST-009/ }).click();
   await page.getByLabel("Stock on hand").fill("30");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
@@ -141,7 +137,8 @@ test("a low-stock restock creates a purchase and replenishes the chosen product"
   page,
 }) => {
   await nav(page, "Inventory");
-  await page.getByRole("button", { name: "Plan a restock" }).click();
+  await page.getByLabel("Select Forma Lounge Chair", { exact: true }).check();
+  await page.getByRole("button", { name: "Restock", exact: true }).click();
   await page
     .getByLabel("Supplier", { exact: true })
     .fill("Independent Workshop");
@@ -204,29 +201,6 @@ test("customers can be created and used in new orders", async ({ page }) => {
   expect((await saved(page)).orders[0].customerId).toBe(customer.id);
 });
 
-test("pages autosave, preview checklists, and survive navigation and reload", async ({
-  page,
-}) => {
-  await nav(page, "Workspace pages");
-  await page
-    .getByLabel("Page content")
-    .fill("A useful page.\n\nTODAY\n☐ Receive the shipment");
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
-  await page.getByRole("checkbox", { name: "Receive the shipment" }).check();
-  await expect(page.getByText("All changes saved")).toBeVisible();
-  await page.reload();
-  await expect(page.getByLabel("Page content")).toHaveValue(
-    /☑ Receive the shipment/,
-  );
-  await page.getByRole("button", { name: "New page", exact: true }).click();
-  await page.getByLabel("Page title").fill("New operations plan");
-  await page.getByLabel("Page content").fill("Plan the next restock.");
-  await page.getByRole("button", { name: "Save page", exact: true }).click();
-  await expect(
-    page.locator("aside").getByRole("link", { name: /New operations plan/ }),
-  ).toBeVisible();
-});
-
 test("keyboard search finds products and CSV exports contain real data", async ({
   page,
 }) => {
@@ -236,7 +210,7 @@ test("keyboard search finds products and CSV exports contain real data", async (
     .fill("Arc Table Lamp");
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("dialog", { name: "Edit product" }),
+    page.getByRole("dialog", { name: "Arc Table Lamp" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await nav(page, "Inventory");
@@ -248,7 +222,7 @@ test("keyboard search finds products and CSV exports contain real data", async (
   let content = "";
   for await (const chunk of stream!) content += chunk;
   expect(content).toContain("Arc Table Lamp");
-  expect(content).toContain("Reserved");
+  expect(content).toContain("Available");
 });
 
 test("mobile navigation, tables, and dialogs fit the viewport", async ({
@@ -256,7 +230,7 @@ test("mobile navigation, tables, and dialogs fit the viewport", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
-    page.getByRole("heading", { name: "Your business, in view." }),
+    page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   for (const name of [
     "Inventory",
@@ -297,7 +271,7 @@ test("workspace settings and reset confirmation work", async ({ page }) => {
   await expect(
     page
       .locator("aside")
-      .getByRole("button", { name: /My Studio Business workspace/ }),
+      .getByRole("button", { name: /My Studio Private workspace/ }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Reset demo data", exact: true })

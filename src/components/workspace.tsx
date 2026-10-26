@@ -19,17 +19,18 @@ import {
   CircleHelp,
   Command,
   CreditCard,
-  FolderOpen,
+  FileText,
   Grid2X2,
   LayoutDashboard,
   Menu,
   MoreHorizontal,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings2,
   ShoppingBag,
-  Sprout,
   Truck,
   Users,
   ChartNoAxesCombined,
@@ -44,14 +45,16 @@ import {
   uid,
 } from "@/lib/domain";
 import { useWorkspace } from "@/lib/store";
+import { setPreferences, usePreferences } from "@/lib/preferences";
 import { Avatar, Badge, Modal, Toast } from "./ui";
 import { Dashboard, Reports, type ViewProps } from "./dashboard";
-import { Customers, Inventory, Orders, Purchasing } from "./records";
+import { Customers, Orders, Purchasing } from "./records";
+import { InventoryWorkspace } from "./inventory-workspace";
 import { RecordDialog, type RecordModal } from "./forms";
-import { Documents, HelpDialog, Settings } from "./pages";
+import { HelpDialog, Settings } from "./pages";
+import { PageBuilder } from "./page-builder";
 
 const navigation = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "inventory", label: "Inventory", icon: Boxes },
   { id: "orders", label: "Sales orders", icon: ShoppingBag },
   { id: "purchasing", label: "Purchasing", icon: Truck },
@@ -80,9 +83,8 @@ const titles: Record<View, string> = {
   documents: "Workspace pages",
   settings: "Workspace settings",
 };
-function getView(): View {
-  const hash = window.location.hash.slice(1) as View;
-  return views.includes(hash) ? hash : "overview";
+function getLocation() {
+  return window.location.hash.slice(1) || "documents";
 }
 function subscribeNavigation(listener: () => void) {
   window.addEventListener("hashchange", listener);
@@ -91,11 +93,16 @@ function subscribeNavigation(listener: () => void) {
 
 export function Workspace() {
   const { state, dispatch, resetDemo, storageWarning } = useWorkspace();
-  const view = useSyncExternalStore(
+  const preferences = usePreferences();
+  const location = useSyncExternalStore(
     subscribeNavigation,
-    getView,
-    () => "overview" as View,
+    getLocation,
+    () => "documents",
   );
+  const [route, query = ""] = location.split("?");
+  const view: View = views.includes(route as View)
+    ? (route as View)
+    : "documents";
   const [modal, setModal] = useState<RecordModal | null>(null);
   const [search, setSearch] = useState(false);
   const [help, setHelp] = useState(false);
@@ -110,15 +117,21 @@ export function Workspace() {
   const notificationRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLElement>(null);
   const dismissToast = useCallback(() => setToast(null), []);
+  const closeRecord = useCallback(() => setModal(null), []);
   const notify = useCallback(
     (message: string, error = false) => setToast({ message, error }),
     [],
   );
-  const navigate = useCallback((next: View) => {
-    window.location.hash = next;
-    setMobile(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }, []);
+  const navigate = useCallback(
+    (next: View, parameters?: Record<string, string>) => {
+      window.location.hash =
+        next +
+        (parameters ? "?" + new URLSearchParams(parameters).toString() : "");
+      setMobile(false);
+      contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+    },
+    [],
+  );
   const open = useCallback((next: RecordModal) => {
     setModal(next);
     setMobile(false);
@@ -129,11 +142,9 @@ export function Workspace() {
         dispatch(action);
         if (message) notify(message);
         return true;
-      } catch (e) {
+      } catch (error) {
         notify(
-          e instanceof Error
-            ? e.message
-            : "Something went wrong. Please try again.",
+          error instanceof Error ? error.message : "Unable to save changes.",
           true,
         );
         return false;
@@ -142,23 +153,23 @@ export function Workspace() {
     [dispatch, notify],
   );
   useEffect(() => {
-    function keyboard(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement)?.tagName;
+    function keyboard(event: KeyboardEvent) {
+      const element = event.target as HTMLElement;
       const typing =
-        ["INPUT", "TEXTAREA", "SELECT"].includes(tag) ||
-        (e.target as HTMLElement)?.isContentEditable;
+        ["INPUT", "TEXTAREA", "SELECT"].includes(element?.tagName) ||
+        element?.isContentEditable;
       if (
-        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") ||
-        (!typing && e.key === "/")
+        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") ||
+        (!typing && event.key === "/")
       ) {
-        e.preventDefault();
+        event.preventDefault();
         setSearch((s) => !s);
       }
-      if (!typing && e.key === "?") {
-        e.preventDefault();
+      if (!typing && event.key === "?") {
+        event.preventDefault();
         setHelp(true);
       }
-      if (e.key === "Escape") {
+      if (event.key === "Escape") {
         setMobile(false);
         setNotifications(false);
       }
@@ -168,8 +179,8 @@ export function Workspace() {
   }, []);
   useEffect(() => {
     if (!notifications) return;
-    function outside(e: PointerEvent) {
-      if (!notificationRef.current?.contains(e.target as Node))
+    function outside(event: PointerEvent) {
+      if (!notificationRef.current?.contains(event.target as Node))
         setNotifications(false);
     }
     document.addEventListener("pointerdown", outside);
@@ -177,6 +188,8 @@ export function Workspace() {
   }, [notifications]);
   const props: ViewProps = { state, navigate, open, notify };
   const unread = state.activities.some((a) => a.at > readAt);
+  const currentDoc =
+    state.documents.find((d) => d.id === documentId) ?? state.documents[0];
   function addPage() {
     const id = uid();
     if (
@@ -188,10 +201,11 @@ export function Workspace() {
             title: "Untitled page",
             icon: "📄",
             content: "",
+            blocks: [{ id: uid(), type: "text", text: "" }],
             updatedAt: new Date().toISOString(),
           },
         },
-        "A new page, a new possibility.",
+        "Page created.",
       )
     ) {
       setDocumentId(id);
@@ -199,12 +213,18 @@ export function Workspace() {
     }
   }
   return (
-    <div className="app-shell">
+    <div
+      className={clsx(
+        "app-shell",
+        preferences.collapsed && "sidebar-collapsed",
+        modal?.type === "product" && modal.product && "has-inspector",
+      )}
+    >
       <a
-        href="#main-content"
         className="skip-link"
-        onClick={(e) => {
-          e.preventDefault();
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
           contentRef.current?.focus();
         }}
       >
@@ -221,121 +241,69 @@ export function Workspace() {
         className={clsx("sidebar", mobile && "sidebar-open")}
         aria-label="Workspace navigation"
       >
-        <a
-          className="brand"
-          href="#overview"
-          onClick={() => setMobile(false)}
-          aria-label="Forma home"
-        >
-          <span className="brand-symbol">
-            f<span>✳</span>
-          </span>
-          <span>
-            forma<span className="brand-dot">.</span>
-          </span>
-          <span className="brand-beta">BETA</span>
-        </a>
+        <div className="brand-row">
+          <a className="brand" href="#documents" aria-label="Forma home">
+            <span className="brand-symbol">
+              <Grid2X2 size={21} strokeWidth={2.3} />
+            </span>
+            <span>
+              forma<span className="brand-dot">.</span>
+            </span>
+            <span className="brand-beta">WORKSPACE</span>
+          </a>
+          <button
+            className="icon-button collapse-nav"
+            aria-label="Collapse sidebar"
+            onClick={() => setPreferences({ collapsed: true })}
+          >
+            <PanelLeftClose size={17} />
+          </button>
+        </div>
         <button
           className="workspace-switcher"
           onClick={() => navigate("settings")}
         >
-          <span className="workspace-logo">F</span>
+          <span className="workspace-logo">{state.settings.name[0]}</span>
           <span>
             <strong>{state.settings.name}</strong>
-            <small>Business workspace</small>
+            <small>Private workspace</small>
           </span>
-          <ChevronDown size={14} />
+          <ChevronDown size={15} />
         </button>
         <button className="sidebar-search" onClick={() => setSearch(true)}>
-          <Search size={15} />
-          <span>Find anything</span>
+          <Search size={17} />
+          <span>Search anything</span>
           <kbd>⌘ K</kbd>
         </button>
-        <div className="nav-section-label">WORKSPACE</div>
-        <nav className="primary-nav">
-          {navigation.map((item) => {
-            const count =
-              item.id === "orders"
-                ? state.orders.filter((o) => o.status === "Processing").length
-                : item.id === "inventory"
-                  ? state.products.filter((p) => p.stock <= p.reorderAt).length
-                  : 0;
-            return (
-              <a
-                key={item.id}
-                aria-label={item.label}
-                href={`#${item.id}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate(item.id);
-                }}
-                aria-current={view === item.id ? "page" : undefined}
-                className={clsx("nav-item", view === item.id && "active")}
-              >
-                <item.icon size={18} strokeWidth={1.65} />
-                <span>{item.label}</span>
-                {count > 0 && (
-                  <span
-                    className={clsx(
-                      "nav-count",
-                      item.id === "inventory" && "nav-count-amber",
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-                {view === item.id && <span className="active-nav-dot" />}
-              </a>
-            );
-          })}
-        </nav>
-        <div className="nav-divider" />
-        <nav className="secondary-nav">
-          <a
-            href="#reports"
-            aria-label="Reports & insights"
-            className={clsx("nav-item", view === "reports" && "active")}
-            aria-current={view === "reports" ? "page" : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("reports");
-            }}
-          >
-            <ChartNoAxesCombined size={18} strokeWidth={1.65} />
-            <span>Reports & insights</span>
-            <span className="new-tag">NEW</span>
-          </a>
-          <a
-            href="#documents"
-            className={clsx("nav-item", view === "documents" && "active")}
-            aria-current={view === "documents" ? "page" : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("documents");
-            }}
-          >
-            <BookOpen size={18} strokeWidth={1.65} />
-            <span>Workspace pages</span>
-          </a>
-        </nav>
+        <a
+          className={clsx("nav-item", view === "overview" && "active")}
+          href="#overview"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("overview");
+          }}
+        >
+          <LayoutDashboard size={18} />
+          <span>Overview</span>
+        </a>
         <div className="nav-section-label favorites-label">
-          <span>PINNED PAGES</span>
+          <span>YOUR PAGES</span>
           <button
             className="icon-button"
             aria-label="Add a workspace page"
             onClick={addPage}
           >
-            <Plus size={14} />
+            <Plus size={15} />
           </button>
         </div>
         <nav className="favorite-pages">
-          {state.documents.slice(0, 4).map((d) => (
+          {state.documents.map((d) => (
             <a
               key={d.id}
               href="#documents"
               className={clsx(
                 "favorite-item",
-                view === "documents" && documentId === d.id && "active",
+                view === "documents" && currentDoc?.id === d.id && "active",
               )}
               onClick={(e) => {
                 e.preventDefault();
@@ -343,44 +311,101 @@ export function Workspace() {
                 navigate("documents");
               }}
             >
-              <span>{d.icon}</span>
+              <FileText size={17} />
               <span>{d.title}</span>
             </a>
           ))}
+          <button className="favorite-item new-page-item" onClick={addPage}>
+            <Plus size={17} />
+            <span>New page</span>
+          </button>
+        </nav>
+        <div className="nav-section-label">
+          <span>DATABASES</span>
+          <DatabaseIndicator />
+        </div>
+        <nav className="primary-nav">
+          {navigation.map((item) => (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              aria-label={item.label}
+              aria-current={view === item.id ? "page" : undefined}
+              className={clsx("nav-item", view === item.id && "active")}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(item.id);
+              }}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+              {item.id === "orders" && (
+                <span className="nav-count">
+                  {state.orders.filter((o) => o.status === "Processing").length}
+                </span>
+              )}
+              {item.id === "inventory" &&
+                state.products.some((p) => p.stock <= p.reorderAt) && (
+                  <span className="attention-dot" />
+                )}
+            </a>
+          ))}
+        </nav>
+        <div className="nav-divider" />
+        <nav className="secondary-nav">
+          <a
+            href="#reports"
+            aria-label="Reports & insights"
+            className={clsx("nav-item", view === "reports" && "active")}
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("reports");
+            }}
+          >
+            <ChartNoAxesCombined size={18} />
+            <span>Reports & insights</span>
+          </a>
+          <a
+            href="#documents"
+            className={clsx(
+              "nav-item pages-directory",
+              view === "documents" && "active",
+            )}
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("documents");
+            }}
+          >
+            <BookOpen size={18} />
+            <span>Workspace pages</span>
+          </a>
         </nav>
         <div className="sidebar-bottom">
-          <div className="grow-card">
-            <span className="grow-illustration">
-              <Sprout size={27} strokeWidth={1.2} />
-            </span>
-            <strong>Your space to grow.</strong>
-            <p>
-              A little structure.
-              <br />
-              Limitless possibilities.
-            </p>
-            <button onClick={() => navigate("settings")}>
-              Make it yours
-              <ArrowUpRight size={13} />
+          <div className="workspace-storage">
+            <span className="mini-dot" />
+            <span>Local workspace</span>
+            <button
+              className="icon-button"
+              aria-label="About local storage"
+              onClick={() => navigate("settings")}
+            >
+              <CircleHelp size={14} />
             </button>
           </div>
-          <button className="nav-item help-link" onClick={() => setHelp(true)}>
-            <CircleHelp size={17} strokeWidth={1.6} />
-            <span>A little help?</span>
-            <kbd>?</kbd>
-          </button>
-          <button
-            className={clsx("nav-item", view === "settings" && "active")}
-            onClick={() => navigate("settings")}
-          >
-            <Settings2 size={17} strokeWidth={1.6} />
+          <button className="nav-item" onClick={() => navigate("settings")}>
+            <Settings2 size={17} />
             <span>Workspace settings</span>
+          </button>
+          <button className="nav-item help-link" onClick={() => setHelp(true)}>
+            <CircleHelp size={17} />
+            <span>Help & shortcuts</span>
+            <kbd>?</kbd>
           </button>
           <button
             className="sidebar-profile"
             onClick={() => navigate("settings")}
           >
-            <Avatar name={state.settings.owner} color="#e6dacc" />
+            <Avatar name={state.settings.owner} color="#e8e4fa" />
             <span>
               <strong>{state.settings.owner}</strong>
               <small>Workspace owner</small>
@@ -399,25 +424,33 @@ export function Workspace() {
             >
               <Menu size={20} />
             </button>
-            <FolderOpen size={15} strokeWidth={1.6} />
-            <button onClick={() => navigate("overview")}>Workspace</button>
-            <ChevronRight size={13} />
-            <span>{titles[view]}</span>
+            <button
+              className="icon-button expand-nav"
+              aria-label="Expand sidebar"
+              onClick={() => setPreferences({ collapsed: false })}
+            >
+              <PanelLeftOpen size={19} />
+            </button>
+            <button
+              className="breadcrumb-workspace"
+              onClick={() => navigate("documents")}
+            >
+              Workspace
+            </button>
+            <ChevronRight size={14} />
+            <span>
+              {view === "documents" ? currentDoc?.title : titles[view]}
+            </span>
             {view === "documents" && (
-              <>
-                <ChevronRight size={13} />
-                <span>
-                  {state.documents.find((d) => d.id === documentId)?.title}
-                </span>
-              </>
+              <span className="private-badge">Private</span>
             )}
           </div>
           <div className="topbar-right">
-            <span className="sync-status">
-              <span />
-              Local demo
-            </span>
-            <span className="topbar-divider" />
+            <button className="topbar-search" onClick={() => setSearch(true)}>
+              <Search size={15} />
+              <span>Search your workspace</span>
+              <kbd>⌘ K</kbd>
+            </button>
             <div className="notification-anchor" ref={notificationRef}>
               <button
                 className="icon-button notification-trigger"
@@ -428,15 +461,15 @@ export function Workspace() {
                   if (!notifications) setReadAt(new Date().toISOString());
                 }}
               >
-                <Bell size={18} strokeWidth={1.6} />
+                <Bell size={18} />
                 {unread && <i />}
               </button>
               {notifications && (
                 <div className="notifications-popover">
                   <div>
-                    <h3>Around your workspace</h3>
+                    <h3>Workspace activity</h3>
                     <Badge tone="green" dot={false}>
-                      Activity
+                      Live
                     </Badge>
                   </div>
                   {state.activities.slice(0, 5).map((a) => (
@@ -469,7 +502,7 @@ export function Workspace() {
                         <small>{a.detail}</small>
                         <em>{shortDate(a.at)}</em>
                       </span>
-                      <ArrowUpRight size={13} />
+                      <ArrowUpRight size={14} />
                     </button>
                   ))}
                 </div>
@@ -480,7 +513,7 @@ export function Workspace() {
               aria-label="Open your workspace settings"
               onClick={() => navigate("settings")}
             >
-              <Avatar name={state.settings.owner} color="#e4d8ca" small />
+              <Avatar name={state.settings.owner} color="#e8e4fa" small />
             </button>
           </div>
         </header>
@@ -495,21 +528,28 @@ export function Workspace() {
               {storageWarning}
             </div>
           )}
-          {view === "overview" && <Dashboard {...props} />}
-          {view === "inventory" && <Inventory {...props} />}
-          {view === "orders" && <Orders {...props} />}
-          {view === "purchasing" && <Purchasing {...props} />}
-          {view === "customers" && <Customers {...props} />}
-          {view === "finances" && <Orders key="finances" {...props} finance />}
-          {view === "reports" && <Reports {...props} />}
           {view === "documents" && (
-            <Documents
+            <PageBuilder
               {...props}
-              onAction={onAction}
               documentId={documentId}
               onSelectDocument={setDocumentId}
+              onAction={onAction}
             />
-          )}
+          )}{" "}
+          {view === "overview" && <Dashboard {...props} />}{" "}
+          {view === "inventory" && (
+            <InventoryWorkspace
+              key={query}
+              {...props}
+              onAction={onAction}
+              initialStock={new URLSearchParams(query).get("stock") || "all"}
+            />
+          )}{" "}
+          {view === "orders" && <Orders {...props} />}{" "}
+          {view === "purchasing" && <Purchasing {...props} />}{" "}
+          {view === "customers" && <Customers {...props} />}{" "}
+          {view === "finances" && <Orders key="finances" {...props} finance />}{" "}
+          {view === "reports" && <Reports {...props} />}{" "}
           {view === "settings" && (
             <Settings {...props} onAction={onAction} reset={resetDemo} />
           )}
@@ -517,11 +557,28 @@ export function Workspace() {
       </div>
       {modal && (
         <RecordDialog
-          key={modal.type + ("id" in modal ? modal.id : "")}
-          modal={modal}
+          key={
+            modal.type +
+            ("id" in modal
+              ? modal.id
+              : modal.type === "product"
+                ? modal.product?.id || "new"
+                : "")
+          }
+          modal={
+            modal.type === "product" && modal.product
+              ? {
+                  ...modal,
+                  product:
+                    state.products.find((p) => p.id === modal.product?.id) ??
+                    modal.product,
+                }
+              : modal
+          }
           state={state}
-          onClose={() => setModal(null)}
+          onClose={closeRecord}
           onAction={onAction}
+          onOpen={open}
         />
       )}
       {search && (
@@ -532,7 +589,7 @@ export function Workspace() {
           onClose={() => setSearch(false)}
         />
       )}
-      {help && <HelpDialog onClose={() => setHelp(false)} />}
+      {help && <HelpDialog onClose={() => setHelp(false)} />}{" "}
       {toast && (
         <Toast
           message={toast.message}
@@ -543,6 +600,9 @@ export function Workspace() {
       )}
     </div>
   );
+}
+function DatabaseIndicator() {
+  return <span className="database-count">5</span>;
 }
 
 function CommandPalette({

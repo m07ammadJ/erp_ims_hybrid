@@ -197,3 +197,92 @@ test("documents save independently without adding activity noise", () => {
   assert.equal(next.documents[0].content, "A fresh idea");
   assert.equal(next.activities.length, state.activities.length);
 });
+
+test("bulk stock adjustments protect reservations and roll back the entire operation on failure", () => {
+  const state = createDemoState();
+  assert.throws(
+    () =>
+      transition(state, {
+        type: "adjust-stock",
+        changes: [
+          { productId: "p1", stock: 47 },
+          { productId: "p2", stock: 0 },
+        ],
+        reason: "Count",
+      }),
+    /reserved/,
+  );
+  assert.equal(state.products[0].stock, 48);
+  assert.equal(state.products[1].stock, 8);
+  const next = transition(state, {
+    type: "adjust-stock",
+    changes: [
+      { productId: "p1", stock: 47 },
+      { productId: "p2", stock: 7 },
+    ],
+    reason: "Physical count",
+  });
+  assert.equal(next.products[0].stock, 47);
+  assert.equal(next.products[1].stock, 7);
+  assert.equal(next.activities[0].detail, "Physical count");
+});
+
+test("bulk stock adjustment rejects duplicates, invalid counts, and missing reasons", () => {
+  const state = createDemoState();
+  assert.throws(() =>
+    transition(state, {
+      type: "adjust-stock",
+      changes: [
+        { productId: "p1", stock: 50 },
+        { productId: "p1", stock: 51 },
+      ],
+      reason: "Count",
+    }),
+  );
+  assert.throws(() =>
+    transition(state, {
+      type: "adjust-stock",
+      changes: [{ productId: "p1", stock: 0.5 }],
+      reason: "Count",
+    }),
+  );
+  assert.throws(() =>
+    transition(state, {
+      type: "adjust-stock",
+      changes: [{ productId: "p1", stock: 50 }],
+      reason: "",
+    }),
+  );
+});
+
+test("page blocks persist their database view configuration", () => {
+  const state = createDemoState();
+  const next = transition(state, {
+    type: "save-document",
+    document: {
+      ...state.documents[0],
+      blocks: [
+        {
+          id: "block",
+          type: "inventory",
+          text: "Low stock",
+          config: { layout: "board", filter: "attention" },
+        },
+      ],
+    },
+  });
+  assert.equal(next.documents[0].blocks![0].config!.layout, "board");
+  assert.equal(next.products[0].stock, 48);
+  assert.throws(() =>
+    transition(state, {
+      type: "save-document",
+      document: {
+        ...state.documents[0],
+        blocks: [
+          { id: "same", type: "text", text: "A" },
+          { id: "same", type: "text", text: "B" },
+        ],
+      },
+    }),
+  );
+});

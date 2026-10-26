@@ -21,6 +21,7 @@ import {
   money,
   reserved,
   shortDate,
+  stockStatus,
   total,
   uid,
 } from "@/lib/domain";
@@ -29,7 +30,7 @@ import { Avatar, Modal, ProductArt, Status } from "./ui";
 export type RecordModal =
   | { type: "product"; product?: Product }
   | { type: "order" }
-  | { type: "purchase"; productId?: string }
+  | { type: "purchase"; productId?: string; productIds?: string[] }
   | { type: "customer"; customer?: Customer }
   | { type: "order-detail"; id: string }
   | { type: "purchase-detail"; id: string };
@@ -38,6 +39,7 @@ interface Props {
   state: AppState;
   onClose: () => void;
   onAction: (action: Action, message: string) => boolean;
+  onOpen?: (modal: RecordModal) => void;
 }
 
 export function RecordDialog(props: Props) {
@@ -52,6 +54,7 @@ export function RecordDialog(props: Props) {
           {...props}
           purchase
           productId={props.modal.productId}
+          productIds={props.modal.productIds}
         />
       );
     case "customer":
@@ -68,6 +71,7 @@ function ProductForm({
   product,
   onClose,
   onAction,
+  onOpen,
 }: Props & { product?: Product }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,10 +101,26 @@ function ProductForm({
   }
   return (
     <Modal
-      title={product ? "Edit product" : "A new addition"}
-      subtitle="The little details that keep everything connected."
+      title={product ? product.name : "New product"}
+      subtitle={
+        product
+          ? `${product.sku} · Product record`
+          : "Add a product to your inventory database."
+      }
       onClose={onClose}
+      variant={product ? "inspector" : "dialog"}
     >
+      {product && (
+        <div className="inspector-summary">
+          <ProductArt product={product} />
+          <div>
+            <Status status={stockStatus(product)} />
+            <span>
+              {product.stock} on hand · {available(state, product.id)} available
+            </span>
+          </div>
+        </div>
+      )}
       <form onSubmit={submit} className="record-form">
         <label>
           Product name
@@ -233,6 +253,25 @@ function ProductForm({
             {reserved(state, product.id)} units are reserved for open orders.
           </div>
         )}
+        {product && onOpen && (
+          <div className="record-connections">
+            <h3>Linked sales orders</h3>
+            {state.orders
+              .filter((o) => o.items.some((i) => i.productId === product.id))
+              .slice(0, 5)
+              .map((o) => (
+                <button
+                  type="button"
+                  key={o.id}
+                  onClick={() => onOpen({ type: "order-detail", id: o.id })}
+                >
+                  <span>{o.number}</span>
+                  <Status status={o.status} />
+                  <ArrowRight size={14} />
+                </button>
+              ))}
+          </div>
+        )}
         <div className="form-footer">
           <button type="button" className="button" onClick={onClose}>
             Cancel
@@ -253,19 +292,28 @@ function TransactionForm({
   onAction,
   purchase,
   productId,
-}: Props & { purchase: boolean; productId?: string }) {
+  productIds,
+}: Props & { purchase: boolean; productId?: string; productIds?: string[] }) {
   const first =
     state.products.find((p) => p.id === productId) ?? state.products[0];
   const [items, setItems] = useState<LineItem[]>(
-    first
-      ? [
-          {
-            productId: first.id,
-            quantity: purchase ? Math.max(first.reorderAt * 2, 10) : 1,
-            price: purchase ? first.cost : first.price,
-          },
-        ]
-      : [],
+    purchase && productIds?.length
+      ? state.products
+          .filter((p) => productIds.includes(p.id))
+          .map((p) => ({
+            productId: p.id,
+            quantity: Math.max(p.reorderAt * 2 - p.stock, 1),
+            price: p.cost,
+          }))
+      : first
+        ? [
+            {
+              productId: first.id,
+              quantity: purchase ? Math.max(first.reorderAt * 2, 10) : 1,
+              price: purchase ? first.cost : first.price,
+            },
+          ]
+        : [],
   );
   const [customerId, setCustomerId] = useState(state.customers[0]?.id ?? "");
   function update(index: number, change: Partial<LineItem>) {

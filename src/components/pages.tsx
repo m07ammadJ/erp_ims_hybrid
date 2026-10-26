@@ -1,29 +1,17 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
   Check,
-  CheckSquare,
   Database,
-  FileText,
-  Heading2,
-  Leaf,
-  List,
-  Plus,
   RotateCcw,
-  Save,
   Settings2,
   ShieldCheck,
 } from "lucide-react";
-import clsx from "clsx";
-import {
-  type Action,
-  type Document as WorkspaceDocument,
-  uid,
-} from "@/lib/domain";
-import { Avatar, Modal } from "./ui";
+import { type Action } from "@/lib/domain";
+import { Modal } from "./ui";
 import type { ViewProps } from "./dashboard";
 
 export function downloadText(
@@ -42,239 +30,6 @@ export function downloadText(
 type WithAction = ViewProps & {
   onAction: (action: Action, message: string) => boolean;
 };
-
-export function Documents(
-  props: WithAction & {
-    documentId: string;
-    onSelectDocument: (id: string) => void;
-  },
-) {
-  const doc =
-    props.state.documents.find((d) => d.id === props.documentId) ??
-    props.state.documents[0];
-  function addDocument() {
-    const newDoc: WorkspaceDocument = {
-      id: uid(),
-      title: "Untitled page",
-      content: "",
-      icon: "📄",
-      updatedAt: new Date().toISOString(),
-    };
-    if (
-      props.onAction(
-        { type: "save-document", document: newDoc },
-        "A fresh page. Make it yours.",
-      )
-    )
-      props.onSelectDocument(newDoc.id);
-  }
-  return (
-    <div className="documents-view animate-in">
-      <div className="documents-nav">
-        <div>
-          <FileText size={15} />
-          <span>Workspace pages</span>
-        </div>
-        <button className="button button-small" onClick={addDocument}>
-          <Plus size={14} />
-          New page
-        </button>
-      </div>
-      <div className="document-tabs">
-        {props.state.documents.map((d) => (
-          <button
-            key={d.id}
-            className={clsx(doc?.id === d.id && "active")}
-            onClick={() => props.onSelectDocument(d.id)}
-          >
-            <span>{d.icon}</span>
-            {d.title}
-          </button>
-        ))}
-      </div>
-      {doc && (
-        <DocumentEditor key={doc.id} doc={doc} onAction={props.onAction} />
-      )}
-    </div>
-  );
-}
-
-function DocumentEditor({
-  doc,
-  onAction,
-}: {
-  doc: WorkspaceDocument;
-  onAction: WithAction["onAction"];
-}) {
-  const [title, setTitle] = useState(doc.title);
-  const [content, setContent] = useState(doc.content);
-  const [preview, setPreview] = useState(false);
-  const editor = useRef<HTMLTextAreaElement>(null);
-  const dirty = title !== doc.title || content !== doc.content;
-  const save = () => {
-    if (dirty)
-      onAction(
-        {
-          type: "save-document",
-          document: {
-            ...doc,
-            title: title.trim(),
-            content,
-            updatedAt: new Date().toISOString(),
-          },
-        },
-        "Your page is saved.",
-      );
-  };
-  function insert(block: string) {
-    const area = editor.current;
-    const position = area?.selectionStart ?? content.length;
-    const text = `${position > 0 ? "\n" : ""}${block}`;
-    setContent(
-      content.slice(0, position) +
-        text +
-        content.slice(area?.selectionEnd ?? position),
-    );
-    requestAnimationFrame(() => {
-      area?.focus();
-      area?.setSelectionRange(position + text.length, position + text.length);
-    });
-  }
-  return (
-    <div className="document-page">
-      <div className="document-cover">
-        <span>Clarity starts with a little space.</span>
-        <Leaf size={82} strokeWidth={0.65} />
-      </div>
-      <div className="document-inner">
-        <div className="document-top">
-          <span className="document-emoji">{doc.icon}</span>
-          <div className="document-tools">
-            <span className={clsx("save-status", dirty && "unsaved")}>
-              {dirty ? (
-                "Unsaved changes"
-              ) : (
-                <>
-                  <Check size={12} />
-                  All changes saved
-                </>
-              )}
-            </span>
-            <button
-              className="button button-small"
-              onClick={() => setPreview(!preview)}
-            >
-              {preview ? "Edit page" : "Preview"}
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Export page as Markdown"
-              onClick={() =>
-                downloadText(
-                  `${title || "page"}.md`,
-                  `# ${title}\n\n${content}`,
-                )
-              }
-            >
-              <ArrowDownToLine size={15} />
-            </button>
-          </div>
-        </div>
-        <input
-          className="document-title"
-          aria-label="Page title"
-          placeholder="Untitled"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={save}
-          maxLength={100}
-        />
-        <div className="document-properties">
-          <span>
-            <Avatar name="Alex Parker" small />
-            Workspace page
-          </span>
-          <span>Private · Saved in this browser</span>
-        </div>
-        {!preview && (
-          <div className="editor-toolbar">
-            <button onClick={() => insert("NEW SECTION\n")}>
-              <Heading2 size={15} />
-              Heading
-            </button>
-            <button onClick={() => insert("• ")}>
-              <List size={15} />
-              List
-            </button>
-            <button onClick={() => insert("☐ ")}>
-              <CheckSquare size={15} />
-              To-do
-            </button>
-            <span />
-            <button onClick={save} disabled={!dirty}>
-              <Save size={14} />
-              Save page
-            </button>
-          </div>
-        )}
-        {preview ? (
-          <div className="document-preview">
-            {content.split("\n").map((line, i) =>
-              line.startsWith("☐ ") || line.startsWith("☑ ") ? (
-                <label key={i} className="document-check">
-                  <input
-                    type="checkbox"
-                    checked={line.startsWith("☑")}
-                    onChange={(e) => {
-                      const lines = content.split("\n");
-                      lines[i] =
-                        (e.target.checked ? "☑ " : "☐ ") + line.slice(2);
-                      const updated = lines.join("\n");
-                      setContent(updated);
-                      onAction(
-                        {
-                          type: "save-document",
-                          document: {
-                            ...doc,
-                            title,
-                            content: updated,
-                            updatedAt: new Date().toISOString(),
-                          },
-                        },
-                        "Checklist updated.",
-                      );
-                    }}
-                  />
-                  <span>{line.slice(2)}</span>
-                </label>
-              ) : line && line === line.toUpperCase() ? (
-                <h3 key={i}>{line}</h3>
-              ) : (
-                <p key={i}>{line || "\u00a0"}</p>
-              ),
-            )}
-          </div>
-        ) : (
-          <textarea
-            ref={editor}
-            className="document-editor"
-            aria-label="Page content"
-            placeholder="Write a little. Make something happen…"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onBlur={save}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-                e.preventDefault();
-                save();
-              }
-            }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
 
 export function Settings({
   state,
@@ -303,9 +58,9 @@ export function Settings({
             <Settings2 size={14} />A space that feels like yours
           </div>
           <h1>
-            Make yourself at home<span className="heading-period">.</span>
+            Workspace settings<span className="heading-period">.</span>
           </h1>
-          <p>The details that make this workspace your workspace.</p>
+          <p>Workspace details, data, and preferences.</p>
         </div>
       </div>
       <section className="panel settings-panel">

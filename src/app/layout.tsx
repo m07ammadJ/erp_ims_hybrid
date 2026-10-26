@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import "@fontsource-variable/dm-sans";
-import "@fontsource/instrument-serif/400.css";
-import "@fontsource/instrument-serif/400-italic.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Forma — A little more clarity. A lot more possibility.",
+  title: "Forma — Your business workspace",
   description:
-    "Your inventory, orders, and operations. One beautifully connected workspace.",
+    "Build your business workspace with connected pages, live databases, and inventory controls.",
 };
 
 export default function RootLayout({

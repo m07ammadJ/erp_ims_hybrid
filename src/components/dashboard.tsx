@@ -2,7 +2,6 @@
 
 import {
   ArrowDownToLine,
-  ArrowRight,
   ArrowUpRight,
   Box,
   CircleCheck,
@@ -10,7 +9,6 @@ import {
   Package,
   Plus,
   ShoppingBag,
-  Sparkles,
   Sun,
   TrendingUp,
 } from "lucide-react";
@@ -31,7 +29,7 @@ import type { RecordModal } from "./forms";
 
 export interface ViewProps {
   state: AppState;
-  navigate: (view: View) => void;
+  navigate: (view: View, parameters?: Record<string, string>) => void;
   open: (modal: RecordModal) => void;
   notify: (message: string, error?: boolean) => void;
 }
@@ -71,13 +69,13 @@ export function Dashboard({ state, navigate, open }: ViewProps) {
       <div className="page-heading">
         <div>
           <div className="eyebrow">
-            <Sun size={14} />A fresh perspective,{" "}
-            {state.settings.owner.split(" ")[0]}
+            <Sun size={14} />
+            OPERATIONS · {state.settings.owner.split(" ")[0]}
           </div>
           <h1>
-            Your business, in view<span className="heading-period">.</span>
+            Overview<span className="heading-period">.</span>
           </h1>
-          <p>A little more clarity. A lot more possibility.</p>
+          <p>Sales, stock, and the work that needs your attention.</p>
         </div>
         <div className="heading-actions">
           <Select
@@ -97,24 +95,6 @@ export function Dashboard({ state, navigate, open }: ViewProps) {
             <Plus size={16} />
             New order
           </button>
-        </div>
-      </div>
-      <div className="overview-banner">
-        <div className="banner-symbol">
-          <Sparkles size={21} strokeWidth={1.4} />
-        </div>
-        <div>
-          <strong>Everything connected. Room to grow.</strong>
-          <p>Your people, products, and progress. All in one happy place.</p>
-        </div>
-        <button onClick={() => navigate("documents")}>
-          Explore your workspace
-          <ArrowRight size={15} />
-        </button>
-        <div className="banner-decoration" aria-hidden="true">
-          <span />
-          <span />
-          <span />
         </div>
       </div>
       <div className="section-caption">
@@ -157,7 +137,7 @@ export function Dashboard({ state, navigate, open }: ViewProps) {
           value={String(low.length).padStart(2, "0")}
           description="a little attention needed"
           accent
-          onClick={() => navigate("inventory")}
+          onClick={() => navigate("inventory", { stock: "attention" })}
         />
       </div>
       <div className="dashboard-middle">
@@ -419,7 +399,7 @@ export function Reports({ state, navigate, open, notify }: ViewProps) {
           title="Gross margin"
           value={`${sales ? (((sales - costs) / sales) * 100).toFixed(1) : 0}%`}
           description="based on current product costs"
-          onClick={() => navigate("inventory")}
+          onClick={() => navigate("inventory", { stock: "attention" })}
         />
       </div>
       <RevenueChart state={state} />

@@ -84,10 +84,39 @@ function validState(value: unknown): value is AppState {
         typeof p.supplier === "string" &&
         typeof p.expectedAt === "string",
     ) &&
-    s.documents.every((d) =>
-      [d.id, d.title, d.content, d.icon, d.updatedAt].every(
-        (v) => typeof v === "string",
-      ),
+    s.documents.every(
+      (d) =>
+        [d.id, d.title, d.content, d.icon, d.updatedAt].every(
+          (v) => typeof v === "string",
+        ) &&
+        (d.blocks === undefined ||
+          (Array.isArray(d.blocks) &&
+            d.blocks.every(
+              (b) =>
+                b &&
+                typeof b.id === "string" &&
+                typeof b.text === "string" &&
+                [
+                  "text",
+                  "heading",
+                  "todo",
+                  "bullet",
+                  "callout",
+                  "divider",
+                  "inventory",
+                  "orders",
+                ].includes(b.type) &&
+                (b.checked === undefined || typeof b.checked === "boolean") &&
+                (b.config === undefined ||
+                  (b.config &&
+                    typeof b.config === "object" &&
+                    (b.config.search === undefined ||
+                      typeof b.config.search === "string") &&
+                    (b.config.filter === undefined ||
+                      typeof b.config.filter === "string") &&
+                    (b.config.layout === undefined ||
+                      ["table", "board"].includes(b.config.layout)))),
+            ))),
     ) &&
     s.activities.every((a) =>
       [a.id, a.text, a.detail, a.type, a.at].every(

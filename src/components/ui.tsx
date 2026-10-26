@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowDown,
@@ -277,28 +277,47 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  variant = "dialog",
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  variant?: "dialog" | "inspector";
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const close = useEffectEvent(onClose);
   useEffect(() => {
     const element = dialog.current;
-    element?.showModal();
+    if (variant === "inspector") element?.show();
+    else element?.showModal();
     const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (variant !== "inspector") document.body.style.overflow = "hidden";
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        variant === "inspector" &&
+        !document.querySelector("dialog:modal")
+      )
+        close();
+    };
+    document.addEventListener("keydown", escape);
     return () => {
       element?.close();
       document.body.style.overflow = previous;
+      document.removeEventListener("keydown", escape);
     };
-  }, []);
+  }, [variant]);
   return (
     <dialog
       ref={dialog}
-      className={clsx("modal", wide && "modal-wide")}
+      className={clsx(
+        "modal",
+        wide && "modal-wide",
+        variant === "inspector" && "modal-inspector",
+      )}
+      aria-modal={variant !== "inspector"}
       onCancel={onClose}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
@@ -379,6 +398,7 @@ export function Toast({
       ? document.querySelectorAll("dialog[open]")
       : [];
   const target =
+    (inDialog ? document.querySelector("dialog:modal") : null) ??
     dialogs[dialogs.length - 1] ??
     (typeof document !== "undefined" ? document.body : null);
   const element = (

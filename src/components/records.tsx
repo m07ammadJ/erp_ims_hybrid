@@ -3,18 +3,12 @@
 import { useState } from "react";
 import {
   ArrowDownToLine,
-  ArrowDownUp,
-  ArrowRight,
   ArrowUpRight,
-  Boxes,
   ChevronLeft,
   ChevronRight,
   Columns3,
-  Grid2X2,
   LayoutList,
-  ListFilter,
   Mail,
-  MapPin,
   Package,
   Plus,
   Search,
@@ -25,16 +19,13 @@ import {
 import clsx from "clsx";
 import {
   type Order,
-  available,
   downloadCsv,
   money,
   number,
-  reserved,
   shortDate,
-  stockStatus,
   total,
 } from "@/lib/domain";
-import { Avatar, Badge, Empty, Metric, ProductArt, Select, Status } from "./ui";
+import { Avatar, Empty, Metric, Status } from "./ui";
 import type { ViewProps } from "./dashboard";
 
 function SearchField({
@@ -59,393 +50,6 @@ function SearchField({
         <button aria-label="Clear search" onClick={() => onChange("")}>
           ×
         </button>
-      )}
-    </div>
-  );
-}
-
-export function Inventory({ state, open, notify }: ViewProps) {
-  const [search, setSearch] = useState("");
-  const [tab, setTab] = useState("All products");
-  const [category, setCategory] = useState("all");
-  const [filters, setFilters] = useState(false);
-  const [grid, setGrid] = useState(false);
-  const [sort, setSort] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
-  const products = state.products
-    .filter(
-      (p) =>
-        `${p.name} ${p.sku} ${p.category} ${p.location}`
-          .toLowerCase()
-          .includes(search.toLowerCase()) &&
-        (category === "all" || p.category === category) &&
-        (tab === "All products" ||
-          (tab === "Low stock"
-            ? p.stock > 0 && p.stock <= p.reorderAt
-            : p.stock === 0)),
-    )
-    .sort((a, b) => (sort ? a.name.localeCompare(b.name) : 0));
-  const low = state.products.filter(
-    (p) => p.stock > 0 && p.stock <= p.reorderAt,
-  ).length;
-  const out = state.products.filter((p) => p.stock === 0).length;
-  const selectedProducts = products.filter((p) => selected.includes(p.id));
-  const exportProducts = () => {
-    const records = selectedProducts.length ? selectedProducts : products;
-    downloadCsv("forma-inventory.csv", [
-      [
-        "Product",
-        "SKU",
-        "Category",
-        "Price",
-        "Cost",
-        "On hand",
-        "Reserved",
-        "Available",
-        "Reorder point",
-        "Location",
-      ],
-      ...records.map((p) => [
-        p.name,
-        p.sku,
-        p.category,
-        p.price,
-        p.cost,
-        p.stock,
-        reserved(state, p.id),
-        available(state, p.id),
-        p.reorderAt,
-        p.location,
-      ]),
-    ]);
-    notify(`${records.length} products exported.`);
-  };
-  return (
-    <div className="animate-in">
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">
-            <Boxes size={14} />
-            Your collection, connected
-          </div>
-          <h1>
-            A place for every product<span className="heading-period">.</span>
-          </h1>
-          <p>Less counting. More creating what comes next.</p>
-        </div>
-        <div className="heading-actions">
-          <button className="button" onClick={exportProducts}>
-            <ArrowDownToLine size={15} />
-            Export
-            {selectedProducts.length ? ` (${selectedProducts.length})` : ""}
-          </button>
-          <button
-            className="button button-primary"
-            onClick={() => open({ type: "product" })}
-          >
-            <Plus size={16} />
-            Add product
-          </button>
-        </div>
-      </div>
-      <div className="inventory-summary">
-        <div>
-          <span className="summary-icon">
-            <Package size={19} />
-          </span>
-          <span>
-            <small>Total products</small>
-            <strong>{state.products.length}</strong>
-          </span>
-        </div>
-        <div>
-          <span className="summary-icon">
-            <Boxes size={19} />
-          </span>
-          <span>
-            <small>Units on hand</small>
-            <strong>
-              {number(state.products.reduce((n, p) => n + p.stock, 0))}
-            </strong>
-          </span>
-        </div>
-        <div>
-          <span className="summary-icon">
-            <MapPin size={19} />
-          </span>
-          <span>
-            <small>Warehouse</small>
-            <strong>
-              Brooklyn{" "}
-              <Badge tone="green" dot={false}>
-                Active
-              </Badge>
-            </strong>
-          </span>
-        </div>
-        <div>
-          <span>
-            <small>Inventory cost value</small>
-            <strong>
-              {money(state.products.reduce((n, p) => n + p.stock * p.cost, 0))}
-            </strong>
-          </span>
-        </div>
-      </div>
-      <section className="panel database-panel">
-        <div className="database-tabs">
-          <div className="tabs">
-            {[
-              ["All products", state.products.length],
-              ["Low stock", low],
-              ["Out of stock", out],
-            ].map(([label, count]) => (
-              <button
-                key={label}
-                className={clsx(tab === label && "active")}
-                onClick={() => setTab(String(label))}
-              >
-                {label}
-                <span>{count}</span>
-              </button>
-            ))}
-          </div>
-          <div className="view-toggle">
-            <button
-              className={clsx(!grid && "active")}
-              aria-label="Table view"
-              aria-pressed={!grid}
-              onClick={() => setGrid(false)}
-            >
-              <LayoutList size={16} />
-            </button>
-            <button
-              className={clsx(grid && "active")}
-              aria-label="Grid view"
-              aria-pressed={grid}
-              onClick={() => setGrid(true)}
-            >
-              <Grid2X2 size={16} />
-            </button>
-          </div>
-        </div>
-        <div className="database-toolbar">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder="Search products, SKUs, anything…"
-          />
-          <div>
-            <button
-              className={clsx(
-                "button button-small",
-                filters && "button-selected",
-              )}
-              onClick={() => setFilters(!filters)}
-            >
-              <ListFilter size={14} />
-              Filter{category !== "all" && <span className="filter-dot" />}
-            </button>
-            <button
-              className={clsx("button button-small", sort && "button-selected")}
-              onClick={() => setSort(!sort)}
-            >
-              <ArrowDownUp size={14} />
-              {sort ? "Name A–Z" : "Sort"}
-            </button>
-          </div>
-        </div>
-        {filters && (
-          <div className="filter-row">
-            <span>Category</span>
-            <Select
-              label="Filter category"
-              value={category}
-              onChange={setCategory}
-              options={[
-                { value: "all", label: "All categories" },
-                ...Array.from(
-                  new Set(state.products.map((p) => p.category)),
-                ).map((c) => ({ value: c, label: c })),
-              ]}
-            />
-            <button
-              className="text-button"
-              onClick={() => {
-                setCategory("all");
-                setTab("All products");
-                setSearch("");
-              }}
-            >
-              Reset filters
-            </button>
-          </div>
-        )}
-        {products.length ? (
-          grid ? (
-            <div className="product-grid">
-              {products.map((p) => (
-                <button
-                  className="product-grid-card"
-                  key={p.id}
-                  onClick={() => open({ type: "product", product: p })}
-                >
-                  <ProductArt product={p} large />
-                  <div>
-                    <span className="product-grid-category">{p.category}</span>
-                    <strong>{p.name}</strong>
-                    <small>{p.sku}</small>
-                    <div className="product-grid-foot">
-                      <span>{money(p.price)}</span>
-                      <Status status={stockStatus(p)} />
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="table-scroll">
-              <table className="inventory-table">
-                <thead>
-                  <tr>
-                    <th className="checkbox-cell">
-                      <input
-                        type="checkbox"
-                        aria-label="Select all visible products"
-                        checked={
-                          products.length > 0 &&
-                          products.every((p) => selected.includes(p.id))
-                        }
-                        onChange={(e) =>
-                          setSelected(
-                            e.target.checked ? products.map((p) => p.id) : [],
-                          )
-                        }
-                      />
-                    </th>
-                    <th>Product name</th>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th className="align-right">On hand</th>
-                    <th className="align-right">Available</th>
-                    <th className="align-right">Unit price</th>
-                    <th>Location</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((p) => (
-                    <tr
-                      key={p.id}
-                      className={clsx(
-                        selected.includes(p.id) && "selected-row",
-                      )}
-                      onClick={() => open({ type: "product", product: p })}
-                    >
-                      <td
-                        className="checkbox-cell"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${p.name}`}
-                          checked={selected.includes(p.id)}
-                          onChange={(e) =>
-                            setSelected((old) =>
-                              e.target.checked
-                                ? [...old, p.id]
-                                : old.filter((id) => id !== p.id),
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <button className="product-cell record-link">
-                          <ProductArt product={p} />
-                          <span>
-                            <strong>{p.name}</strong>
-                            <small>{p.sku}</small>
-                          </span>
-                        </button>
-                      </td>
-                      <td>
-                        <span className="category-label">{p.category}</span>
-                      </td>
-                      <td>
-                        <Status status={stockStatus(p)} />
-                      </td>
-                      <td className="align-right amount">{p.stock}</td>
-                      <td className="align-right muted">
-                        {available(state, p.id)}
-                      </td>
-                      <td className="align-right amount">{money(p.price)}</td>
-                      <td className="location-cell">{p.location}</td>
-                      <td>
-                        <ArrowUpRight size={14} className="row-arrow" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        ) : (
-          <Empty
-            title="Nothing on this shelf just yet"
-            text="Try adjusting your search or filters."
-            action={
-              <button
-                className="button"
-                onClick={() => {
-                  setSearch("");
-                  setCategory("all");
-                  setTab("All products");
-                }}
-              >
-                Clear filters
-              </button>
-            }
-          />
-        )}
-        <div className="table-footer">
-          <span>
-            {selectedProducts.length
-              ? `${selectedProducts.length} selected · `
-              : ""}
-            {products.length} of {state.products.length} products
-          </span>
-          <span>
-            <span className="mini-dot" />
-            Inventory stays connected to your orders
-          </span>
-        </div>
-      </section>
-      {low + out > 0 && (
-        <div className="inventory-callout">
-          <span className="callout-icon">
-            <Truck size={21} strokeWidth={1.5} />
-          </span>
-          <div>
-            <strong>A little planning goes a long way.</strong>
-            <p>
-              {low + out} products are at or below their reorder point. Keep
-              your next bestsellers within reach.
-            </p>
-          </div>
-          <button
-            className="button"
-            onClick={() =>
-              open({
-                type: "purchase",
-                productId: state.products.find((p) => p.stock <= p.reorderAt)
-                  ?.id,
-              })
-            }
-          >
-            Plan a restock
-            <ArrowRight size={15} />
-          </button>
-        </div>
       )}
     </div>
   );
@@ -514,13 +118,13 @@ export function Orders({
               : "Every order, a new possibility"}
           </div>
           <h1>
-            {finance ? "A clearer kind of cash flow" : "Good things in motion"}
+            {finance ? "Payments" : "Sales orders"}
             <span className="heading-period">.</span>
           </h1>
           <p>
             {finance
               ? "Track order payments and see where things stand."
-              : "From first click to final doorstep. All connected."}
+              : "Track, fulfill, and manage your customer orders."}
           </p>
         </div>
         <div className="heading-actions">
@@ -791,9 +395,9 @@ export function Purchasing({ state, open, notify }: ViewProps) {
             Keep the good things coming
           </div>
           <h1>
-            Room for what’s next<span className="heading-period">.</span>
+            Purchasing<span className="heading-period">.</span>
           </h1>
-          <p>Thoughtful purchasing. Well-stocked possibilities.</p>
+          <p>Manage suppliers, incoming shipments, and replenishment.</p>
         </div>
         <div className="heading-actions">
           <button
@@ -969,9 +573,9 @@ export function Customers({ state, open, notify }: ViewProps) {
             Good people. Great possibilities.
           </div>
           <h1>
-            Business is a people thing<span className="heading-period">.</span>
+            Customers<span className="heading-period">.</span>
           </h1>
-          <p>A shared home for the connections that matter.</p>
+          <p>Your customer records and their order history.</p>
         </div>
         <div className="heading-actions">
           <button
