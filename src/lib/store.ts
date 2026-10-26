@@ -7,6 +7,14 @@ import {
   transition,
   type Action,
 } from "./domain";
+import {
+  typeOf,
+  unitOf,
+  units,
+  validManufacturing,
+  validQuantity,
+  upgradeManufacturing,
+} from "./manufacturing";
 
 const KEY = "forma.workspace.v1";
 const initial = createDemoState();
@@ -48,7 +56,11 @@ function validState(value: unknown): value is AppState {
         typeof p.color === "string" &&
         [p.price, p.cost, p.stock, p.reorderAt].every(
           (n) => Number.isFinite(n) && n >= 0,
-        ),
+        ) &&
+        units.includes(unitOf(p)) &&
+        ["material", "finished"].includes(typeOf(p)) &&
+        validQuantity(p.stock, p, true) &&
+        validQuantity(p.reorderAt, p, true),
     ) &&
     s.customers.every((c) =>
       [c.id, c.name, c.company, c.email, c.color].every(
@@ -64,8 +76,10 @@ function validState(value: unknown): value is AppState {
         o.items.every(
           (i) =>
             s.products.some((p) => p.id === i.productId) &&
-            Number.isSafeInteger(i.quantity) &&
-            i.quantity > 0 &&
+            validQuantity(
+              i.quantity,
+              s.products.find((p) => p.id === i.productId)!,
+            ) &&
             Number.isFinite(i.price) &&
             i.price >= 0,
         ),
@@ -105,6 +119,7 @@ function validState(value: unknown): value is AppState {
                   "divider",
                   "inventory",
                   "orders",
+                  "production",
                 ].includes(b.type) &&
                 (b.checked === undefined || typeof b.checked === "boolean") &&
                 (b.config === undefined ||
@@ -118,6 +133,7 @@ function validState(value: unknown): value is AppState {
                       ["table", "board"].includes(b.config.layout)))),
             ))),
     ) &&
+    validManufacturing(s.manufacturing, s.products) &&
     s.activities.every((a) =>
       [a.id, a.text, a.detail, a.type, a.at].every(
         (v) => typeof v === "string",
@@ -131,7 +147,7 @@ function getSnapshot() {
     try {
       const stored = localStorage.getItem(KEY);
       if (stored) {
-        const parsed: unknown = JSON.parse(stored);
+        const parsed: unknown = upgradeManufacturing(JSON.parse(stored));
         if (validState(parsed)) snapshot = parsed;
         else
           storageWarning =

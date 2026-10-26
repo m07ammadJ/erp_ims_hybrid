@@ -34,10 +34,12 @@ import {
   Truck,
   Users,
   ChartNoAxesCombined,
+  Factory,
 } from "lucide-react";
 import clsx from "clsx";
 import {
   type Action,
+  customerLabel,
   type AppState,
   type View,
   shortDate,
@@ -53,15 +55,20 @@ import { InventoryWorkspace } from "./inventory-workspace";
 import { RecordDialog, type RecordModal } from "./forms";
 import { HelpDialog, Settings } from "./pages";
 import { PageBuilder } from "./page-builder";
+import { ManufacturingWorkspace, Suppliers } from "./manufacturing-workspace";
 
 const navigation = [
   { id: "inventory", label: "Inventory", icon: Boxes },
+  { id: "manufacturing", label: "Production", icon: Factory },
+  { id: "suppliers", label: "Suppliers", icon: Truck },
   { id: "orders", label: "Sales orders", icon: ShoppingBag },
   { id: "purchasing", label: "Purchasing", icon: Truck },
   { id: "customers", label: "Customers", icon: Users },
   { id: "finances", label: "Payments", icon: CreditCard },
 ] as const;
 const views: View[] = [
+  "manufacturing",
+  "suppliers",
   "overview",
   "inventory",
   "orders",
@@ -73,6 +80,8 @@ const views: View[] = [
   "settings",
 ];
 const titles: Record<View, string> = {
+  manufacturing: "Production",
+  suppliers: "Suppliers",
   overview: "Overview",
   inventory: "Inventory",
   orders: "Sales orders",
@@ -322,7 +331,7 @@ export function Workspace() {
         </nav>
         <div className="nav-section-label">
           <span>DATABASES</span>
-          <DatabaseIndicator />
+          <span className="database-count">{navigation.length}</span>
         </div>
         <nav className="primary-nav">
           {navigation.map((item) => (
@@ -536,13 +545,22 @@ export function Workspace() {
               onAction={onAction}
             />
           )}{" "}
-          {view === "overview" && <Dashboard {...props} />}{" "}
+          {view === "overview" && <Dashboard {...props} />}
+          {view === "manufacturing" && <ManufacturingWorkspace {...props} />}
+          {view === "suppliers" && <Suppliers {...props} />}{" "}
           {view === "inventory" && (
             <InventoryWorkspace
               key={query}
               {...props}
               onAction={onAction}
               initialStock={new URLSearchParams(query).get("stock") || "all"}
+              initialType={
+                new URLSearchParams(query).get("type") === "material"
+                  ? "material"
+                  : new URLSearchParams(query).get("type") === "finished"
+                    ? "finished"
+                    : "all"
+              }
             />
           )}{" "}
           {view === "orders" && <Orders {...props} />}{" "}
@@ -601,9 +619,6 @@ export function Workspace() {
     </div>
   );
 }
-function DatabaseIndicator() {
-  return <span className="database-count">5</span>;
-}
 
 function CommandPalette({
   state,
@@ -658,15 +673,13 @@ function CommandPalette({
     ...state.orders.map((o) => ({
       id: o.id,
       label: o.number,
-      detail:
-        state.customers.find((c) => c.id === o.customerId)?.company ??
-        "Sales order",
+      detail: customerLabel(state.customers.find((c) => c.id === o.customerId)),
       icon: ShoppingBag,
       run: () => open({ type: "order-detail", id: o.id }),
     })),
     ...state.customers.map((c) => ({
       id: c.id,
-      label: c.company,
+      label: customerLabel(c),
       detail: `${c.name} · ${c.email}`,
       icon: Users,
       run: () => open({ type: "customer", customer: c }),

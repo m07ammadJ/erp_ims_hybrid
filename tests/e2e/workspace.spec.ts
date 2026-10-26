@@ -36,13 +36,13 @@ test("add and edit inventory, filter it, and persist after reload", async ({
   page,
 }) => {
   await nav(page, "Inventory");
-  await page.getByRole("button", { name: "Add product", exact: true }).click();
-  await page.getByLabel("Product name").fill("Test Work Lamp");
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
+  await page.getByLabel("Item name").fill("Test Work Lamp");
   await page.getByLabel("SKU", { exact: true }).fill("TEST-009");
   await page.getByLabel("Sale price").fill("59.95");
   await page.getByLabel("Unit cost").fill("20.5");
   await page.getByLabel("Stock on hand").fill("25");
-  await page.getByRole("button", { name: "Create product" }).click();
+  await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("new addition");
   await page.getByPlaceholder("Search products or SKU…").fill("TEST-009");
@@ -129,8 +129,8 @@ test("purchase receipt updates all products once and survives reload", async ({
   ).toHaveCount(0);
   await page.reload();
   const state = await saved(page);
-  expect(state.products.find((p) => p.id === "p2")!.stock).toBe(38);
-  expect(state.products.find((p) => p.id === "p5")!.stock).toBe(25);
+  expect(state.products.find((p) => p.id === "m-clay")!.stock).toBe(170.5);
+  expect(state.products.find((p) => p.id === "m-glaze")!.stock).toBe(13.25);
 });
 
 test("a low-stock restock creates a purchase and replenishes the chosen product", async ({
@@ -182,8 +182,10 @@ test("overselling shows an error and cancelling releases the corrected order", a
 test("customers can be created and used in new orders", async ({ page }) => {
   await nav(page, "Customers");
   await page.getByRole("button", { name: "Add customer" }).click();
-  await page.getByLabel("Full name").fill("Taylor Morgan");
-  await page.getByLabel("Company", { exact: true }).fill("Tomorrow Studio");
+  await page.getByLabel("Customer name").fill("Taylor Morgan");
+  await page
+    .getByLabel("Company / organization (optional)", { exact: true })
+    .fill("Tomorrow Studio");
   await page.getByLabel("Email address").fill("taylor@example.com");
   await page
     .getByRole("dialog")
@@ -249,7 +251,7 @@ test("mobile navigation, tables, and dialogs fit the viewport", async ({
   }
   await page.getByRole("button", { name: "Open navigation" }).click();
   await nav(page, "Inventory");
-  await page.getByRole("button", { name: "Add product", exact: true }).click();
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeInViewport();
   const rect = await page.getByRole("dialog").boundingBox();
   expect(rect!.width).toBeLessThanOrEqual(390);

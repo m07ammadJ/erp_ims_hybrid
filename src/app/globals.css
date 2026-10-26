@@ -5204,3 +5204,273 @@ td,
     transform: translateY(0);
   }
 }
+
+/* Manufacturing: material flow, recipes, and production controls. */
+[hidden] {
+  display: none !important;
+}
+.manufacturing-flow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #faf9fc;
+  margin: 0 0 24px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.manufacturing-flow > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 145px;
+  flex: 1;
+  text-align: left;
+  padding: 8px;
+  border-radius: 6px;
+  color: #8d829d;
+}
+.manufacturing-flow > button:hover {
+  background: #f0ecf7;
+}
+.manufacturing-flow > button.active {
+  background: #eee9f9;
+  color: #7862ab;
+}
+.manufacturing-flow > button > span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.manufacturing-flow strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.manufacturing-flow small {
+  font-size: 10px;
+  color: #a197ae;
+}
+.manufacturing-flow > svg {
+  color: #c2b7ce;
+}
+.manufacturing-section-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  color: #9d90ac;
+  letter-spacing: 0.7px;
+  margin: 7px 0 15px;
+}
+.manufacturing-section-label > span {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #b5a9c1;
+}
+.bom-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bom-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 72px 25px;
+  gap: 10px;
+  align-items: center;
+}
+.bom-line label {
+  margin-bottom: 0;
+}
+.bom-line > .icon-button {
+  margin-top: 22px;
+  width: 25px;
+}
+.bom-line-cost {
+  font-size: 11px;
+  text-align: right;
+  color: #a18bb5;
+  margin-top: 22px;
+}
+.bom-lines + .text-button {
+  margin: 15px 0 0;
+}
+.conversion-costs {
+  margin-top: 23px;
+}
+.production-output-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e9e1f1;
+  border-radius: 6px;
+  background: #faf7fd;
+  margin-bottom: 19px;
+  color: #ac93c0;
+}
+.production-output-preview > span {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.production-output-preview strong {
+  font-size: 13px;
+  color: #84708f;
+  font-weight: 550;
+}
+.production-output-preview small {
+  font-size: 11px;
+  color: #ae9bbc;
+  line-height: 1.7;
+}
+.production-requirements {
+  border: 1px solid #ede6f4;
+  border-radius: 6px;
+  margin: 15px 0;
+}
+.production-requirements th {
+  font-size: 10px;
+}
+.production-requirements td {
+  font-size: 11px;
+  padding: 12px 13px;
+}
+.production-cost-breakdown {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid #f0e8f6;
+  padding: 10px 0 19px;
+  margin-top: 15px;
+  font-size: 11px;
+  color: #ac97bb;
+}
+.production-cost-breakdown > span {
+  display: flex;
+  gap: 15px;
+}
+.production-cost-breakdown b {
+  font-weight: 500;
+  color: #9e84b1;
+}
+.manufacturing-shortage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  background: #fbf3eb;
+  border: 1px solid #efdfce;
+  border-radius: 5px;
+  padding: 12px;
+  margin: 14px 0;
+  color: #b79971;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.manufacturing-shortage > .button {
+  font-size: 10px;
+}
+.empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 8px;
+}
+.quantity-out {
+  color: #ba8983 !important;
+}
+.quantity-in {
+  color: #849f83 !important;
+}
+.supplier-card h3 .record-link {
+  font-size: 15px;
+  font-weight: 550;
+}
+.supplier-purchase {
+  margin-top: 20px;
+  width: 100%;
+  font-size: 11px;
+}
+@media (max-width: 649px) {
+  .manufacturing-flow {
+    padding: 12px;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .manufacturing-flow > button {
+    min-width: 145px;
+    gap: 8px;
+    padding: 8px;
+  }
+  .manufacturing-flow small {
+    font-size: 9px;
+  }
+  .manufacturing-flow strong {
+    font-size: 11px;
+  }
+  .manufacturing-section-label {
+    flex-direction: column;
+    gap: 6px;
+    margin: 12px 0;
+  }
+  .manufacturing-section-label > span {
+    font-size: 9px;
+  }
+  .bom-line {
+    grid-template-columns: minmax(0, 1fr) 70px 22px;
+    gap: 7px;
+  }
+  .bom-line-cost {
+    display: none;
+  }
+  .bom-line label {
+    font-size: 10px;
+  }
+  .bom-line .icon-button {
+    width: 22px;
+  }
+  .bom-line input,
+  .bom-line select {
+    font-size: 10px;
+    padding: 7px;
+  }
+  .conversion-costs {
+    gap: 10px;
+  }
+  .production-output-preview {
+    padding: 13px;
+    gap: 10px;
+  }
+  .production-output-preview strong {
+    font-size: 12px;
+  }
+  .production-output-preview small {
+    font-size: 10px;
+  }
+  .production-requirements table {
+    min-width: 430px;
+  }
+  .production-cost-breakdown {
+    font-size: 10px;
+    gap: 18px;
+  }
+  .production-cost-breakdown > span {
+    gap: 8px;
+  }
+  .manufacturing-shortage {
+    flex-wrap: wrap;
+    gap: 9px;
+    font-size: 10px;
+  }
+  .empty-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .manufacturing-workspace > .data-note {
+    font-size: 10px;
+  }
+  .supplier-card h3 .record-link {
+    font-size: 14px;
+  }
+}

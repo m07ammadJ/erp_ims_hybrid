@@ -24,13 +24,31 @@ import {
   stockStatus,
   total,
   uid,
+  customerLabel,
 } from "@/lib/domain";
+import {
+  typeOf,
+  unitOf,
+  units,
+  type ItemType,
+  type Unit,
+} from "@/lib/manufacturing";
+import { ManufacturingDialog } from "./manufacturing-forms";
 import { Avatar, Modal, ProductArt, Status } from "./ui";
 
 export type RecordModal =
-  | { type: "product"; product?: Product }
+  | { type: "product"; product?: Product; itemType?: ItemType }
   | { type: "order" }
-  | { type: "purchase"; productId?: string; productIds?: string[] }
+  | {
+      type: "purchase";
+      productId?: string;
+      productIds?: string[];
+      supplierId?: string;
+    }
+  | { type: "bom"; bomId?: string }
+  | { type: "production"; bomId?: string }
+  | { type: "production-detail"; id: string }
+  | { type: "supplier"; supplierId?: string }
   | { type: "customer"; customer?: Customer }
   | { type: "order-detail"; id: string }
   | { type: "purchase-detail"; id: string };
@@ -45,7 +63,18 @@ interface Props {
 export function RecordDialog(props: Props) {
   switch (props.modal.type) {
     case "product":
-      return <ProductForm {...props} product={props.modal.product} />;
+      return (
+        <ProductForm
+          {...props}
+          product={props.modal.product}
+          defaultType={props.modal.itemType}
+        />
+      );
+    case "bom":
+    case "production":
+    case "production-detail":
+    case "supplier":
+      return <ManufacturingDialog {...props} />;
     case "order":
       return <TransactionForm {...props} purchase={false} />;
     case "purchase":
@@ -55,6 +84,7 @@ export function RecordDialog(props: Props) {
           purchase
           productId={props.modal.productId}
           productIds={props.modal.productIds}
+          supplierId={props.modal.supplierId}
         />
       );
     case "customer":
@@ -72,7 +102,12 @@ function ProductForm({
   onClose,
   onAction,
   onOpen,
-}: Props & { product?: Product }) {
+  defaultType,
+}: Props & { product?: Product; defaultType?: ItemType }) {
+  const [itemType, setItemType] = useState<ItemType>(
+    product ? typeOf(product) : (defaultType ?? "finished"),
+  );
+  const [unit, setUnit] = useState<Unit>(product ? unitOf(product) : "pcs");
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const f = new FormData(event.currentTarget);
@@ -81,13 +116,15 @@ function ProductForm({
       name: String(f.get("name")),
       sku: String(f.get("sku")),
       category: String(f.get("category")),
-      price: Number(f.get("price")),
+      price: itemType === "material" ? 0 : Number(f.get("price")),
       cost: Number(f.get("cost")),
       stock: Number(f.get("stock")),
       reorderAt: Number(f.get("reorderAt")),
       location: String(f.get("location")),
       kind: String(f.get("kind")) as Product["kind"],
       color: product?.color ?? "#e9e5db",
+      itemType,
+      unit,
     };
     if (
       onAction(
@@ -101,11 +138,11 @@ function ProductForm({
   }
   return (
     <Modal
-      title={product ? product.name : "New product"}
+      title={product ? product.name : "New inventory item"}
       subtitle={
         product
           ? `${product.sku} · Product record`
-          : "Add a product to your inventory database."
+          : "Add a raw material, component, or finished product with its base unit."
       }
       onClose={onClose}
       variant={product ? "inspector" : "dialog"}
@@ -116,23 +153,51 @@ function ProductForm({
           <div>
             <Status status={stockStatus(product)} />
             <span>
-              {product.stock} on hand · {available(state, product.id)} available
+              {product.stock} {unitOf(product)} on hand ·{" "}
+              {available(state, product.id)} available
             </span>
           </div>
         </div>
       )}
       <form onSubmit={submit} className="record-form">
         <label>
-          Product name
+          Item name
           <input
             name="name"
-            placeholder="e.g. Arc Table Lamp"
+            placeholder="e.g. Steel sheet, cotton fabric, finished assembly…"
             defaultValue={product?.name}
             required
             maxLength={100}
             autoFocus
           />
         </label>
+        <div className="form-grid">
+          <label>
+            Item type
+            <select
+              aria-label="Item type"
+              value={itemType}
+              onChange={(e) => setItemType(e.target.value as ItemType)}
+            >
+              <option value="material">Raw material / input</option>
+              <option value="finished">Finished product / assembly</option>
+            </select>
+          </label>
+          <label>
+            Base unit
+            <select
+              aria-label="Base unit"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value as Unit)}
+            >
+              {units.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="form-grid">
           <label>
             SKU
@@ -146,21 +211,28 @@ function ProductForm({
           </label>
           <label>
             Category
-            <select
+            <input
               aria-label="Category"
               name="category"
-              defaultValue={product?.category ?? "Objects"}
-            >
-              {["Furniture", "Lighting", "Objects", "Textiles", "Other"].map(
+              list="item-categories"
+              defaultValue={
+                product?.category ??
+                (itemType === "material" ? "Raw materials" : "Finished goods")
+              }
+              required
+              maxLength={80}
+            />
+            <datalist id="item-categories">
+              {Array.from(new Set(state.products.map((p) => p.category))).map(
                 (c) => (
                   <option key={c}>{c}</option>
                 ),
               )}
-            </select>
+            </datalist>
           </label>
         </div>
         <div className="form-grid">
-          <label>
+          <label hidden={itemType === "material"}>
             Sale price ($)
             <input
               name="price"
@@ -168,8 +240,10 @@ function ProductForm({
               min="0"
               max="999999999"
               step="0.01"
-              defaultValue={product?.price ?? ""}
-              required
+              defaultValue={
+                product?.price ?? (itemType === "material" ? 0 : "")
+              }
+              required={itemType !== "material"}
               placeholder="0.00"
             />
           </label>
@@ -195,7 +269,7 @@ function ProductForm({
               type="number"
               min={product ? reserved(state, product.id) : 0}
               max="1000000000"
-              step="1"
+              step={unit === "pcs" ? "1" : "0.000001"}
               defaultValue={product?.stock ?? 0}
               required
             />
@@ -207,7 +281,7 @@ function ProductForm({
               type="number"
               min="0"
               max="1000000000"
-              step="1"
+              step={unit === "pcs" ? "1" : "0.000001"}
               defaultValue={product?.reorderAt ?? 10}
               required
             />
@@ -277,7 +351,7 @@ function ProductForm({
             Cancel
           </button>
           <button className="button button-primary" type="submit">
-            {product ? "Save changes" : "Create product"}
+            {product ? "Save changes" : "Create item"}
             <ArrowRight size={15} />
           </button>
         </div>
@@ -293,9 +367,24 @@ function TransactionForm({
   purchase,
   productId,
   productIds,
-}: Props & { purchase: boolean; productId?: string; productIds?: string[] }) {
+  supplierId,
+}: Props & {
+  purchase: boolean;
+  productId?: string;
+  productIds?: string[];
+  supplierId?: string;
+}) {
+  const choices = state.products
+    .filter((p) => purchase || typeOf(p) === "finished")
+    .sort((a, b) =>
+      purchase
+        ? Number(typeOf(b) === "material") - Number(typeOf(a) === "material")
+        : 0,
+    );
   const first =
-    state.products.find((p) => p.id === productId) ?? state.products[0];
+    choices.find((p) => p.id === productId) ??
+    (purchase ? choices.find((p) => typeOf(p) === "material") : choices[0]) ??
+    choices[0];
   const [items, setItems] = useState<LineItem[]>(
     purchase && productIds?.length
       ? state.products
@@ -363,6 +452,10 @@ function TransactionForm({
               <input
                 aria-label="Supplier"
                 name="supplier"
+                defaultValue={
+                  state.manufacturing.suppliers.find((s) => s.id === supplierId)
+                    ?.name
+                }
                 list="suppliers"
                 placeholder="Choose or enter a supplier"
                 required
@@ -370,9 +463,9 @@ function TransactionForm({
                 autoFocus
               />
               <datalist id="suppliers">
-                <option>Nordic Form Co.</option>
-                <option>Studio Ceramics</option>
-                <option>Everyday Objects</option>
+                {state.manufacturing.suppliers.map((s) => (
+                  <option key={s.id}>{s.name}</option>
+                ))}
               </datalist>
             </label>
             <label>
@@ -397,14 +490,15 @@ function TransactionForm({
             >
               {state.customers.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.company} — {c.name}
+                  {customerLabel(c)}
+                  {c.company && c.company !== c.name ? ` · ${c.name}` : ""}
                 </option>
               ))}
             </select>
           </label>
         )}
         <div className="line-items-heading">
-          <span>PRODUCT</span>
+          <span>{purchase ? "INPUT / ITEM" : "FINISHED PRODUCT"}</span>
           <span>QTY</span>
           <span>{purchase ? "COST" : "PRICE"}</span>
           <span />
@@ -425,7 +519,7 @@ function TransactionForm({
                   });
                 }}
               >
-                {state.products.map((p) => (
+                {choices.map((p) => (
                   <option
                     key={p.id}
                     value={p.id}
@@ -433,7 +527,7 @@ function TransactionForm({
                       (item, i) => i !== index && item.productId === p.id,
                     )}
                   >
-                    {p.name}
+                    {p.name} · {unitOf(p)}
                     {!purchase ? ` (${available(state, p.id)} available)` : ""}
                   </option>
                 ))}
@@ -441,9 +535,21 @@ function TransactionForm({
               <input
                 aria-label={`Quantity ${index + 1}`}
                 type="number"
-                min="1"
+                min={
+                  unitOf(
+                    state.products.find((p) => p.id === item.productId)!,
+                  ) === "pcs"
+                    ? "1"
+                    : "0.000001"
+                }
                 max="1000000"
-                step="1"
+                step={
+                  unitOf(
+                    state.products.find((p) => p.id === item.productId)!,
+                  ) === "pcs"
+                    ? "1"
+                    : "0.000001"
+                }
                 required
                 value={Number.isNaN(item.quantity) ? "" : item.quantity}
                 onChange={(e) =>
@@ -484,9 +590,9 @@ function TransactionForm({
         <button
           type="button"
           className="text-button add-line"
-          disabled={items.length === state.products.length}
+          disabled={items.length === choices.length}
           onClick={() => {
-            const p = state.products.find(
+            const p = choices.find(
               (p) => !items.some((i) => i.productId === p.id),
             );
             if (p)
@@ -549,6 +655,8 @@ function CustomerForm({
             company: String(f.get("company")),
             email: String(f.get("email")),
             color: customer?.color ?? "#e4e9e1",
+            entityType: String(f.get("entityType")) as Customer["entityType"],
+            phone: String(f.get("phone")),
           },
         },
         "Customer saved. A good connection.",
@@ -559,41 +667,55 @@ function CustomerForm({
   return (
     <Modal
       title={customer ? "Edit customer" : "A new connection"}
-      subtitle="Good business starts with good relationships."
+      subtitle="Customers can be individuals, businesses, organizations, or any other entity."
       onClose={onClose}
     >
       <form className="record-form" onSubmit={submit}>
         <label>
-          Full name
+          Customer name
           <input
             name="name"
             defaultValue={customer?.name}
-            placeholder="e.g. Olivia Rhye"
+            placeholder="Person, business, organization, or other customer"
             required
             maxLength={100}
             autoFocus
           />
         </label>
         <label>
-          Company
+          Customer type
+          <select
+            name="entityType"
+            aria-label="Customer type"
+            defaultValue={customer?.entityType ?? "business"}
+          >
+            <option value="individual">Individual</option>
+            <option value="business">Business / organization</option>
+            <option value="other">Other entity</option>
+          </select>
+        </label>
+        <label>
+          Company / organization (optional)
           <input
             name="company"
             defaultValue={customer?.company}
             placeholder="e.g. The Modern House"
-            required
             maxLength={100}
           />
         </label>
         <label>
-          Email address
+          Email address (optional)
           <input
             name="email"
             type="email"
             defaultValue={customer?.email}
             placeholder="hello@example.com"
-            required
             maxLength={160}
           />
+        </label>
+        <label>
+          Phone (optional)
+          <input name="phone" defaultValue={customer?.phone} maxLength={60} />
         </label>
         <div className="form-footer">
           <button type="button" className="button" onClick={onClose}>
@@ -647,7 +769,7 @@ function OrderDetail({ state, id, onClose, onAction }: Props & { id: string }) {
                   const p = state.products.find((p) => p.id === i.productId)!;
                   return [
                     order.number,
-                    customer.company,
+                    customerLabel(customer),
                     p.sku,
                     p.name,
                     i.quantity,
@@ -667,7 +789,7 @@ function OrderDetail({ state, id, onClose, onAction }: Props & { id: string }) {
         <div className="detail-customer">
           <Avatar name={customer.name} color={customer.color} />
           <div>
-            <strong>{customer.company}</strong>
+            <strong>{customerLabel(customer)}</strong>
             <span>
               {customer.name} · {customer.email}
             </span>

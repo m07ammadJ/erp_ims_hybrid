@@ -1,4 +1,23 @@
+import {
+  demoManufacturing,
+  isManufacturingAction,
+  manufacturingTransition,
+  productionReserved,
+  roundQuantity,
+  typeOf,
+  unitOf,
+  units,
+  validQuantity,
+  movement,
+  type ManufacturingAction,
+  type ManufacturingState,
+  type ItemType,
+  type Unit,
+} from "./manufacturing";
+
 export type View =
+  | "manufacturing"
+  | "suppliers"
   | "overview"
   | "inventory"
   | "orders"
@@ -23,6 +42,8 @@ export interface Product {
   location: string;
   kind: ProductKind;
   color: string;
+  itemType?: ItemType;
+  unit?: Unit;
 }
 export interface Customer {
   id: string;
@@ -30,7 +51,15 @@ export interface Customer {
   company: string;
   email: string;
   color: string;
+  entityType?: "individual" | "business" | "other";
+  phone?: string;
 }
+export const customerLabel = (customer?: Customer) =>
+  !customer
+    ? "Unknown customer"
+    : customer.entityType === "individual"
+      ? customer.name
+      : customer.company || customer.name;
 export interface LineItem {
   productId: string;
   quantity: number;
@@ -49,6 +78,7 @@ export interface Purchase {
   id: string;
   number: string;
   supplier: string;
+  supplierId?: string;
   items: LineItem[];
   status: "Ordered" | "Received";
   createdAt: string;
@@ -58,7 +88,7 @@ export interface Activity {
   id: string;
   text: string;
   detail: string;
-  type: "order" | "stock" | "payment" | "workspace";
+  type: "order" | "stock" | "payment" | "workspace" | "production";
   at: string;
 }
 export type BlockType =
@@ -69,7 +99,8 @@ export type BlockType =
   | "callout"
   | "divider"
   | "inventory"
-  | "orders";
+  | "orders"
+  | "production";
 export interface PageBlock {
   id: string;
   type: BlockType;
@@ -99,6 +130,7 @@ export interface AppState {
   activities: Activity[];
   documents: Document[];
   settings: { name: string; owner: string; currency: "USD" };
+  manufacturing: ManufacturingState;
 }
 export const uid = () => crypto.randomUUID();
 export const money = (value: number, compact = false) =>
@@ -117,19 +149,24 @@ export const total = (record: { items: LineItem[] }) =>
       100,
   ) / 100;
 export const reserved = (state: AppState, productId: string) =>
-  state.orders
-    .filter((o) => o.status === "Processing")
-    .reduce(
-      (sum, order) =>
-        sum +
-        order.items
-          .filter((item) => item.productId === productId)
-          .reduce((n, item) => n + item.quantity, 0),
-      0,
-    );
+  roundQuantity(
+    productionReserved(state, productId) +
+      state.orders
+        .filter((o) => o.status === "Processing")
+        .reduce(
+          (sum, order) =>
+            sum +
+            order.items
+              .filter((item) => item.productId === productId)
+              .reduce((n, item) => n + item.quantity, 0),
+          0,
+        ),
+  );
 export const available = (state: AppState, productId: string) => {
   const product = state.products.find((p) => p.id === productId);
-  return product ? product.stock - reserved(state, productId) : 0;
+  return product
+    ? roundQuantity(product.stock - reserved(state, productId))
+    : 0;
 };
 export const stockStatus = (product: Product) =>
   product.stock === 0
@@ -274,6 +311,12 @@ export function createDemoState(): AppState {
       color: "#e9e1d7",
     },
   ];
+  const demo = demoManufacturing();
+  products.forEach((p) => {
+    p.itemType = "finished";
+    p.unit = "pcs";
+  });
+  products.push(...demo.materials);
   const customers: Customer[] = [
     {
       id: "c1",
@@ -338,6 +381,7 @@ export function createDemoState(): AppState {
   });
   return {
     version: 1,
+    manufacturing: demo.manufacturing,
     products,
     customers,
     orders,
@@ -345,10 +389,11 @@ export function createDemoState(): AppState {
       {
         id: "po1",
         number: "PO-0086",
-        supplier: "Nordic Form Co.",
+        supplier: "Atlas Materials",
+        supplierId: "s1",
         items: [
-          { productId: "p2", quantity: 30, price: 220 },
-          { productId: "p5", quantity: 20, price: 98 },
+          { productId: "m-clay", quantity: 50, price: 2.8 },
+          { productId: "m-glaze", quantity: 5, price: 18 },
         ],
         status: "Ordered",
         createdAt: daysAgo(3),
@@ -357,8 +402,9 @@ export function createDemoState(): AppState {
       {
         id: "po2",
         number: "PO-0085",
-        supplier: "Studio Ceramics",
-        items: [{ productId: "p3", quantity: 60, price: 24 }],
+        supplier: "Packaging Works",
+        supplierId: "s3",
+        items: [{ productId: "m-box", quantity: 60, price: 1.2 }],
         status: "Received",
         createdAt: daysAgo(12),
         expectedAt: "2026-10-22",
@@ -366,8 +412,9 @@ export function createDemoState(): AppState {
       {
         id: "po3",
         number: "PO-0084",
-        supplier: "Everyday Objects",
-        items: [{ productId: "p7", quantity: 40, price: 32 }],
+        supplier: "Timber Supply Co.",
+        supplierId: "s2",
+        items: [{ productId: "m-oak", quantity: 20, price: 12.5 }],
         status: "Ordered",
         createdAt: daysAgo(4),
         expectedAt: "2026-10-30",
@@ -397,8 +444,8 @@ export function createDemoState(): AppState {
       },
       {
         id: "a4",
-        text: "Purchase order created",
-        detail: "Nordic Form Co. · PO-0086",
+        text: "Materials ordered",
+        detail: "Atlas Materials · PO-0086",
         type: "stock",
         at: daysAgo(3),
       },
@@ -409,13 +456,13 @@ export function createDemoState(): AppState {
         title: "Operations hub",
         icon: "📋",
         content:
-          "A little structure. A lot of room to grow.\n\nThis is our shared home for the way we work. Keep useful context here so everyone can move with clarity.\n\nTHIS WEEK’S PRIORITIES\n☐ Receive the Nordic Form shipment\n☐ Review low-stock items and create purchase orders\n☐ Fulfill open customer orders\n\nGOOD TO KNOW\nInventory is tracked at our Brooklyn warehouse. Processing sales orders reserve stock; shipping deducts it. Receive purchase orders to add stock.\n\nTEAM RITUALS\nMonday · Plan the week\nWednesday · Inventory review\nFriday · Celebrate the little wins",
+          "A little structure. A lot of room to grow.\n\nThis is our shared home for the way we work. Keep useful context here so everyone can move with clarity.\n\nTHIS WEEK’S PRIORITIES\n☐ Receive the next raw material shipment\n☐ Review low-stock items and create purchase orders\n☐ Fulfill open customer orders\n\nGOOD TO KNOW\nInventory is tracked at our Brooklyn warehouse. Processing sales orders reserve stock; shipping deducts it. Receive purchase orders to add stock.\n\nTEAM RITUALS\nMonday · Plan the week\nWednesday · Inventory review\nFriday · Celebrate the little wins",
         updatedAt: daysAgo(1),
         blocks: [
           {
             id: "b-intro",
             type: "text",
-            text: "Your products, orders, and plans — connected in one page. Shape this workspace around the way your business works.",
+            text: "Buy materials, plan production, and sell what you make. Keep the whole manufacturing flow connected in this workspace.",
           },
           {
             id: "b-note",
@@ -425,7 +472,7 @@ export function createDemoState(): AppState {
           {
             id: "b-stock",
             type: "inventory",
-            text: "Inventory",
+            text: "Raw materials & finished stock",
             config: { layout: "table", filter: "all" },
           },
           {
@@ -434,11 +481,17 @@ export function createDemoState(): AppState {
             text: "Orders to fulfill",
             config: { layout: "table", filter: "Processing" },
           },
+          {
+            id: "b-production",
+            type: "production",
+            text: "Production",
+            config: { layout: "table", filter: "active" },
+          },
           { id: "b-heading", type: "heading", text: "This week" },
           {
             id: "b-todo1",
             type: "todo",
-            text: "Receive the Nordic Form shipment",
+            text: "Receive the next raw material shipment",
             checked: false,
           },
           {
@@ -463,6 +516,7 @@ export function createDemoState(): AppState {
 }
 
 export type Action =
+  | ManufacturingAction
   | {
       type: "adjust-stock";
       changes: { productId: string; stock: number }[];
@@ -502,10 +556,11 @@ function validItems(state: AppState, items: LineItem[]) {
     );
     ids.add(item.productId);
     assert(
-      Number.isSafeInteger(item.quantity) &&
-        item.quantity > 0 &&
-        item.quantity <= 1e9,
-      "Quantities must be positive whole numbers up to one billion.",
+      validQuantity(
+        item.quantity,
+        state.products.find((p) => p.id === item.productId)!,
+      ),
+      "Enter a valid quantity in the item's base unit (whole numbers for pcs, up to six decimals for measured units).",
     );
     assert(
       Number.isFinite(item.price) && item.price >= 0 && item.price < 1e9,
@@ -522,6 +577,8 @@ function nextNumber(prefix: string, numbers: string[], start: number) {
 }
 
 export function transition(state: AppState, action: Action): AppState {
+  if (isManufacturingAction(action))
+    return manufacturingTransition(state, action);
   let next: AppState = { ...state };
   let activity: Omit<Activity, "id" | "at"> = {
     text: "Workspace updated",
@@ -543,10 +600,12 @@ export function transition(state: AppState, action: Action): AppState {
           "A product no longer exists.",
         );
         assert(
-          Number.isSafeInteger(change.stock) &&
-            change.stock >= 0 &&
-            change.stock <= 1e9,
-          "Stock must be a non-negative whole number up to one billion.",
+          validQuantity(
+            change.stock,
+            state.products.find((p) => p.id === change.productId)!,
+            true,
+          ),
+          "Enter a valid stock quantity in the item's base unit.",
         );
         assert(
           change.stock >= reserved(state, change.productId),
@@ -557,6 +616,23 @@ export function transition(state: AppState, action: Action): AppState {
         const change = action.changes.find((c) => c.productId === p.id);
         return change ? { ...p, stock: change.stock } : p;
       });
+      next.manufacturing = {
+        ...state.manufacturing,
+        movements: [
+          ...action.changes.map((c) => {
+            const p = state.products.find((p) => p.id === c.productId)!;
+            return movement(
+              p.id,
+              c.stock - p.stock,
+              p.cost,
+              "Adjustment",
+              "Stock adjustment",
+              action.reason.trim(),
+            );
+          }),
+          ...state.manufacturing.movements,
+        ],
+      };
       activity = {
         text: `Stock adjusted for ${action.changes.length} product${action.changes.length === 1 ? "" : "s"}`,
         detail: action.reason.trim(),
@@ -586,11 +662,35 @@ export function transition(state: AppState, action: Action): AppState {
         "Prices must be valid, non-negative amounts.",
       );
       assert(
-        [p.stock, p.reorderAt].every(
-          (n) => Number.isSafeInteger(n) && n >= 0 && n <= 1e9,
-        ),
-        "Stock and reorder levels must be non-negative whole numbers.",
+        [p.stock, p.reorderAt].every((n) => validQuantity(n, p, true)),
+        "Enter valid stock and reorder quantities in this item's base unit.",
       );
+      assert(
+        units.includes(p.unit ?? "pcs") &&
+          ["material", "finished"].includes(p.itemType ?? "finished"),
+        "Choose a supported item type and base unit.",
+      );
+      const previous = state.products.find((item) => item.id === p.id);
+      const referenced =
+        state.orders.some((o) => o.items.some((i) => i.productId === p.id)) ||
+        state.purchases.some((o) =>
+          o.items.some((i) => i.productId === p.id),
+        ) ||
+        state.manufacturing.boms.some(
+          (b) =>
+            b.productId === p.id ||
+            b.components.some((c) => c.productId === p.id),
+        ) ||
+        state.manufacturing.jobs.some(
+          (j) =>
+            j.productId === p.id ||
+            j.components.some((c) => c.productId === p.id),
+        );
+      if (previous && referenced)
+        assert(
+          unitOf(p) === unitOf(previous) && typeOf(p) === typeOf(previous),
+          "Items with existing transactions or recipes must keep their type and base unit. Create a new SKU for a different unit or role.",
+        );
       assert(
         p.stock >= reserved(state, p.id),
         `This product has ${reserved(state, p.id)} reserved units. Stock cannot be lower.`,
@@ -598,6 +698,20 @@ export function transition(state: AppState, action: Action): AppState {
       next.products = state.products.some((item) => item.id === p.id)
         ? state.products.map((item) => (item.id === p.id ? p : item))
         : [...state.products, p];
+      if (!previous || previous.stock !== p.stock)
+        next.manufacturing = {
+          ...state.manufacturing,
+          movements: [
+            movement(
+              p.id,
+              p.stock - (previous?.stock ?? 0),
+              p.cost,
+              previous ? "Adjustment" : "Opening",
+              previous ? "Item edit" : "Opening stock",
+            ),
+            ...state.manufacturing.movements,
+          ],
+        };
       activity = {
         text: `Inventory updated`,
         detail: `${p.name} · ${p.stock} units on hand`,
@@ -607,6 +721,14 @@ export function transition(state: AppState, action: Action): AppState {
     }
     case "create-order": {
       validItems(state, action.items);
+      assert(
+        action.items.every(
+          (i) =>
+            typeOf(state.products.find((p) => p.id === i.productId)!) ===
+            "finished",
+        ),
+        "Sales orders use finished goods. Receive materials and complete production before selling the output.",
+      );
       assert(
         state.customers.some((c) => c.id === action.customerId),
         "Choose a customer.",
@@ -631,7 +753,7 @@ export function transition(state: AppState, action: Action): AppState {
       };
       next.orders = [order, ...state.orders];
       activity = {
-        text: `New order from ${state.customers.find((c) => c.id === order.customerId)?.company}`,
+        text: `New order from ${customerLabel(state.customers.find((c) => c.id === order.customerId)!)}`,
         detail: `${order.number} · ${money(total(order))}`,
         type: "order",
       };
@@ -651,13 +773,29 @@ export function transition(state: AppState, action: Action): AppState {
         );
       next.products = state.products.map((p) => ({
         ...p,
-        stock:
+        stock: roundQuantity(
           p.stock -
-          (order.items.find((i) => i.productId === p.id)?.quantity ?? 0),
+            (order.items.find((i) => i.productId === p.id)?.quantity ?? 0),
+        ),
       }));
       next.orders = state.orders.map((o) =>
         o.id === action.id ? { ...o, status: "Shipped" } : o,
       );
+      next.manufacturing = {
+        ...state.manufacturing,
+        movements: [
+          ...order.items.map((i) =>
+            movement(
+              i.productId,
+              -i.quantity,
+              state.products.find((p) => p.id === i.productId)!.cost,
+              "Sale",
+              order.number,
+            ),
+          ),
+          ...state.manufacturing.movements,
+        ],
+      };
       activity = {
         text: `${order.number} is on its way`,
         detail: "Order shipped · inventory updated",
@@ -720,6 +858,15 @@ export function transition(state: AppState, action: Action): AppState {
         !Number.isNaN(Date.parse(action.expectedAt)),
         "Choose a valid expected delivery date.",
       );
+      const supplierName = action.supplier.trim();
+      const supplier = state.manufacturing.suppliers.find(
+        (s) => s.name.toLowerCase() === supplierName.toLowerCase(),
+      ) ?? { id: uid(), name: supplierName, contact: "", email: "", phone: "" };
+      if (!state.manufacturing.suppliers.some((s) => s.id === supplier.id))
+        next.manufacturing = {
+          ...state.manufacturing,
+          suppliers: [...state.manufacturing.suppliers, supplier],
+        };
       const purchase: Purchase = {
         id: uid(),
         number: nextNumber(
@@ -727,7 +874,8 @@ export function transition(state: AppState, action: Action): AppState {
           state.purchases.map((p) => p.number),
           86,
         ),
-        supplier: action.supplier.trim(),
+        supplier: supplier.name,
+        supplierId: supplier.id,
         items: action.items.map((i) => ({ ...i })),
         status: "Ordered",
         createdAt: new Date().toISOString(),
@@ -754,18 +902,40 @@ export function transition(state: AppState, action: Action): AppState {
             1e9,
           "Receiving this shipment would exceed the maximum stock level of one billion units.",
         );
-      next.products = state.products.map((p) => ({
-        ...p,
-        stock:
-          p.stock +
-          (purchase.items.find((i) => i.productId === p.id)?.quantity ?? 0),
-      }));
+      next.products = state.products.map((p) => {
+        const line = purchase.items.find((i) => i.productId === p.id);
+        if (!line) return p;
+        const stock = roundQuantity(p.stock + line.quantity);
+        return {
+          ...p,
+          stock,
+          cost: roundQuantity(
+            (p.stock * p.cost + line.quantity * line.price) / stock,
+          ),
+        };
+      });
+      next.manufacturing = {
+        ...state.manufacturing,
+        movements: [
+          ...purchase.items.map((i) =>
+            movement(
+              i.productId,
+              i.quantity,
+              i.price,
+              "Purchase",
+              purchase.number,
+              purchase.supplier,
+            ),
+          ),
+          ...state.manufacturing.movements,
+        ],
+      };
       next.purchases = state.purchases.map((p) =>
         p.id === action.id ? { ...p, status: "Received" } : p,
       );
       activity = {
         text: `${purchase.number} received`,
-        detail: `${purchase.items.reduce((n, i) => n + i.quantity, 0)} units added to inventory`,
+        detail: `${purchase.items.length} input line${purchase.items.length === 1 ? "" : "s"} received from ${purchase.supplier}`,
         type: "stock",
       };
       break;
@@ -779,14 +949,21 @@ export function transition(state: AppState, action: Action): AppState {
       };
       assert(
         customer.name &&
-          customer.company &&
-          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email),
-        "Enter a name, company, and valid email address.",
+          (!customer.email ||
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)),
+        "Enter a customer name and a valid email address if provided.",
+      );
+      assert(
+        ["individual", "business", "other"].includes(
+          customer.entityType ?? "business",
+        ),
+        "Choose a valid customer type.",
       );
       assert(
         !state.customers.some(
           (c) =>
             c.id !== customer.id &&
+            customer.email &&
             c.email.toLowerCase() === customer.email.toLowerCase(),
         ),
         "A customer with this email already exists.",
@@ -796,7 +973,7 @@ export function transition(state: AppState, action: Action): AppState {
         : [...state.customers, customer];
       activity = {
         text: "Customer saved",
-        detail: customer.company,
+        detail: customerLabel(customer),
         type: "workspace",
       };
       break;
@@ -822,6 +999,7 @@ export function transition(state: AppState, action: Action): AppState {
                 "divider",
                 "inventory",
                 "orders",
+                "production",
               ].includes(b.type),
           ),
           "Unsupported page block.",

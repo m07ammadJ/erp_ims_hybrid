@@ -10,6 +10,7 @@ export interface InventoryView {
   sort: string;
   columns: string[];
   layout: "table" | "grid";
+  itemType?: "all" | "material" | "finished";
 }
 interface Preferences {
   collapsed: boolean;
@@ -22,7 +23,15 @@ const initial: Preferences = {
   collapsed: false,
   density: "comfortable",
   fullWidth: true,
-  columns: ["category", "status", "stock", "available", "price", "location"],
+  columns: [
+    "itemType",
+    "unit",
+    "status",
+    "stock",
+    "available",
+    "price",
+    "location",
+  ],
   savedViews: [],
 };
 let snapshot = initial,

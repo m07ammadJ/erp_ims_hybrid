@@ -14,16 +14,17 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import {
+  customerLabel,
   type AppState,
   type View,
   downloadCsv,
   money,
-  number,
   reportingDate,
   shortDate,
   total,
 } from "@/lib/domain";
 import { Avatar, Badge, Metric, ProductArt, Select, Status } from "./ui";
+import { typeOf } from "@/lib/manufacturing";
 import { InventoryHealth, RevenueChart } from "./charts";
 import type { RecordModal } from "./forms";
 
@@ -128,7 +129,7 @@ export function Dashboard({ state, navigate, open }: ViewProps) {
         <Metric
           title="Inventory value"
           value={money(value)}
-          description={`${number(state.products.reduce((n, p) => n + p.stock, 0))} units, full of potential`}
+          description={`${state.products.filter((p) => typeOf(p) === "material").length} material SKUs · ${state.products.filter((p) => typeOf(p) === "finished").length} finished SKUs`}
           spark={state.products.map((p) => p.stock * p.cost)}
           onClick={() => navigate("inventory")}
         />
@@ -195,7 +196,7 @@ export function Dashboard({ state, navigate, open }: ViewProps) {
                       <td>
                         <div className="customer-cell">
                           <Avatar name={c.name} color={c.color} small />
-                          <span>{c.company}</span>
+                          <span>{customerLabel(c)}</span>
                         </div>
                       </td>
                       <td>

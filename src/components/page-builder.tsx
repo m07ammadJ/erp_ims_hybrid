@@ -32,9 +32,11 @@ import {
   ShoppingBag,
   Trash2,
   Type,
+  Factory,
 } from "lucide-react";
 import clsx from "clsx";
 import {
+  customerLabel,
   available,
   money,
   stockStatus,
@@ -49,6 +51,8 @@ import { setPreferences, usePreferences } from "@/lib/preferences";
 import type { ViewProps } from "./dashboard";
 import { Empty, ProductArt, Status } from "./ui";
 import { downloadText } from "./pages";
+import { ProductionBlock } from "./manufacturing-workspace";
+import { typeOf, unitOf } from "@/lib/manufacturing";
 
 const blockTypes: {
   type: BlockType;
@@ -98,6 +102,13 @@ const blockTypes: {
     description: "Sales orders, connected to this page",
     icon: ShoppingBag,
     command: "orders",
+  },
+  {
+    type: "production",
+    name: "Linked production",
+    description: "Live manufacturing orders and their progress",
+    icon: Factory,
+    command: "production",
   },
   {
     type: "callout",
@@ -151,7 +162,9 @@ export function blocksToMarkdown(blocks: PageBlock[]) {
             ? `- ${b.text}`
             : b.type === "divider"
               ? "---"
-              : b.type === "inventory" || b.type === "orders"
+              : b.type === "inventory" ||
+                  b.type === "orders" ||
+                  b.type === "production"
                 ? `> Linked ${b.type} database (live in Forma)`
                 : b.type === "callout"
                   ? `> ${b.text}`
@@ -331,7 +344,7 @@ function PageCanvas({
             ? "Sales orders"
             : "",
       ...(type === "todo" ? { checked: false } : {}),
-      ...(["inventory", "orders"].includes(type)
+      ...(["inventory", "orders", "production"].includes(type)
         ? { config: { layout: "table", filter: "all" } }
         : {}),
     };
@@ -489,8 +502,9 @@ function PageCanvas({
         <span>
           <Database size={13} />
           {
-            blocks.filter((b) => ["inventory", "orders"].includes(b.type))
-              .length
+            blocks.filter((b) =>
+              ["inventory", "orders", "production"].includes(b.type),
+            ).length
           }{" "}
           linked databases
         </span>
@@ -553,6 +567,14 @@ function PageCanvas({
             )}
             {block.type === "divider" ? (
               <hr />
+            ) : block.type === "production" ? (
+              <ProductionBlock
+                state={state}
+                open={open}
+                navigate={navigate}
+                block={block}
+                onChange={(change) => update(block.id, change)}
+              />
             ) : ["inventory", "orders"].includes(block.type) ? (
               <LinkedDatabase
                 block={block}
@@ -657,6 +679,10 @@ function PageCanvas({
             <ShoppingBag size={16} />
             Link orders
           </button>
+          <button onClick={() => insert("production")}>
+            <Factory size={16} />
+            Link production
+          </button>
           <button onClick={() => insert("todo")}>
             <CheckSquare size={16} />
             To-do
@@ -728,11 +754,14 @@ function LinkedDatabase({
   const products = state.products.filter(
     (p) =>
       `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase()) &&
-      (filter === "all" || p.stock <= p.reorderAt),
+      (filter === "all" ||
+        (filter === "material" || filter === "finished"
+          ? typeOf(p) === filter
+          : p.stock <= p.reorderAt)),
   );
   const orders = state.orders.filter(
     (o) =>
-      `${o.number} ${state.customers.find((c) => c.id === o.customerId)?.company}`
+      `${o.number} ${customerLabel(state.customers.find((c) => c.id === o.customerId))}`
         .toLowerCase()
         .includes(search.toLowerCase()) &&
       (filter === "all" || o.status === filter),
@@ -767,10 +796,12 @@ function LinkedDatabase({
             onClick={() => update({ filter: "all" })}
           >
             <LayoutList size={14} />
-            {inventory ? "All products" : "All orders"}
+            {inventory ? "All stock" : "All orders"}
           </button>
           <button
-            className={clsx(filter !== "all" && "active")}
+            className={clsx(
+              (filter === "attention" || filter === "Processing") && "active",
+            )}
             onClick={() =>
               update({ filter: inventory ? "attention" : "Processing" })
             }
@@ -782,6 +813,22 @@ function LinkedDatabase({
                 : state.orders.filter((o) => o.status === "Processing").length}
             </span>
           </button>
+          {inventory && (
+            <>
+              <button
+                className={clsx(filter === "material" && "active")}
+                onClick={() => update({ filter: "material" })}
+              >
+                Raw materials
+              </button>
+              <button
+                className={clsx(filter === "finished" && "active")}
+                onClick={() => update({ filter: "finished" })}
+              >
+                Finished goods
+              </button>
+            </>
+          )}
         </div>
         <div className="linked-controls">
           <div className="linked-search">
@@ -858,10 +905,9 @@ function LinkedDatabase({
                       >
                         <small>{o.number}</small>
                         <strong>
-                          {
-                            state.customers.find((c) => c.id === o.customerId)
-                              ?.company
-                          }
+                          {customerLabel(
+                            state.customers.find((c) => c.id === o.customerId),
+                          )}
                         </strong>
                         <small>{money(total(o))}</small>
                       </button>
@@ -896,7 +942,9 @@ function LinkedDatabase({
                           <ProductArt product={p} />
                           <span>
                             <strong>{p.name}</strong>
-                            <small>{p.sku}</small>
+                            <small>
+                              {p.sku} · {unitOf(p)}
+                            </small>
                           </span>
                         </button>
                       </td>
@@ -907,9 +955,11 @@ function LinkedDatabase({
                         <Status status={stockStatus(p)} />
                       </td>
                       <td className="align-right amount">
-                        {available(state, p.id)}
+                        {available(state, p.id)} {unitOf(p)}
                       </td>
-                      <td className="align-right amount">{money(p.price)}</td>
+                      <td className="align-right amount">
+                        {typeOf(p) === "material" ? "—" : money(p.price)}
+                      </td>
                       <td>
                         <ArrowUpRight size={14} className="row-arrow" />
                       </td>
@@ -924,10 +974,9 @@ function LinkedDatabase({
                         <button className="record-link">{o.number}</button>
                       </td>
                       <td>
-                        {
-                          state.customers.find((c) => c.id === o.customerId)
-                            ?.company
-                        }
+                        {customerLabel(
+                          state.customers.find((c) => c.id === o.customerId),
+                        )}
                       </td>
                       <td>
                         <Status status={o.status} />

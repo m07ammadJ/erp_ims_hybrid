@@ -36,8 +36,11 @@ import {
 } from "@/lib/preferences";
 import type { ViewProps } from "./dashboard";
 import { Empty, Modal, ProductArt, Select, Status } from "./ui";
+import { typeOf, unitOf, type ItemType } from "@/lib/manufacturing";
 
 const columnOptions = [
+  ["itemType", "Item type"],
+  ["unit", "Unit"],
   ["category", "Category"],
   ["status", "Status"],
   ["stock", "On hand"],
@@ -55,13 +58,16 @@ export function InventoryWorkspace({
   notify,
   onAction,
   initialStock = "all",
+  initialType = "all",
 }: ViewProps & {
   onAction: (action: Action, message: string) => boolean;
   initialStock?: string;
+  initialType?: "all" | ItemType;
 }) {
   const preferences = usePreferences();
   const [search, setSearch] = useState("");
   const [stock, setStock] = useState(initialStock);
+  const [itemType, setItemType] = useState<"all" | ItemType>(initialType);
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("manual");
   const [layout, setLayout] = useState<"table" | "grid">("table");
@@ -84,6 +90,7 @@ export function InventoryWorkspace({
               : p.stock > p.reorderAt);
       return (
         matchesStock &&
+        (itemType === "all" || typeOf(p) === itemType) &&
         (category === "all" || p.category === category) &&
         `${p.name} ${p.sku} ${p.location}`
           .toLowerCase()
@@ -108,28 +115,41 @@ export function InventoryWorkspace({
   const attention = state.products.filter((p) => p.stock <= p.reorderAt).length;
   const clearSelection = () => setSelected([]);
   function exportProducts() {
+    const exportColumns = columns.filter(
+      (c) => c !== "itemType" && c !== "unit",
+    );
     const records = selected.length ? selectedProducts : products;
     downloadCsv("forma-inventory.csv", [
       [
-        "Product",
+        "Item",
         "SKU",
-        ...columns.map((c) => columnOptions.find(([id]) => id === c)?.[1] ?? c),
+        "Item type",
+        "Base unit",
+        ...exportColumns.map(
+          (c) => columnOptions.find(([id]) => id === c)?.[1] ?? c,
+        ),
       ],
       ...records.map((p) => [
         p.name,
         p.sku,
-        ...columns.map((c) =>
-          c === "available"
-            ? available(state, p.id)
-            : c === "reserved"
-              ? reserved(state, p.id)
-              : c === "status"
-                ? stockStatus(p)
-                : c === "margin"
-                  ? p.price
-                    ? `${(((p.price - p.cost) / p.price) * 100).toFixed(1)}%`
-                    : "0%"
-                  : p[c as keyof typeof p],
+        typeOf(p),
+        unitOf(p),
+        ...exportColumns.map((c) =>
+          c === "itemType"
+            ? typeOf(p)
+            : c === "unit"
+              ? unitOf(p)
+              : c === "available"
+                ? available(state, p.id)
+                : c === "reserved"
+                  ? reserved(state, p.id)
+                  : c === "status"
+                    ? stockStatus(p)
+                    : c === "margin"
+                      ? p.price
+                        ? `${(((p.price - p.cost) / p.price) * 100).toFixed(1)}%`
+                        : "0%"
+                      : (p[c as keyof typeof p] ?? ""),
         ),
       ]),
     ]);
@@ -140,6 +160,7 @@ export function InventoryWorkspace({
     setCategory(view.category);
     setSort(view.sort);
     setLayout(view.layout);
+    setItemType(view.itemType ?? "all");
     setPreferences({ columns: view.columns });
     setSearch("");
     clearSelection();
@@ -165,7 +186,10 @@ export function InventoryWorkspace({
             DATABASE
           </div>
           <h1>Inventory</h1>
-          <p>One source of truth for every product, unit, and location.</p>
+          <p>
+            Raw materials, components, and finished goods in their own base
+            units.
+          </p>
         </div>
         <div className="heading-actions">
           <button className="button" onClick={exportProducts}>
@@ -174,19 +198,27 @@ export function InventoryWorkspace({
           </button>
           <button
             className="button button-primary"
-            onClick={() => open({ type: "product" })}
+            onClick={() =>
+              open({
+                type: "product",
+                itemType: itemType === "material" ? "material" : "finished",
+              })
+            }
           >
             <Plus size={16} />
-            Add product
+            Add item
           </button>
         </div>
       </div>
       <div className="database-summary">
         <span>
-          <b>{state.products.length}</b> products
+          <b>{state.products.length}</b> inventory items
         </span>
         <span>
-          <b>{state.products.reduce((n, p) => n + p.stock, 0)}</b> units on hand
+          <b>{state.products.filter((p) => typeOf(p) === "material").length}</b>{" "}
+          material SKUs ·{" "}
+          <b>{state.products.filter((p) => typeOf(p) === "finished").length}</b>{" "}
+          finished SKUs
         </span>
         <span>
           <b>
@@ -206,15 +238,48 @@ export function InventoryWorkspace({
       <section className="panel database-panel">
         <div className="database-tabs">
           <div className="tabs">
+            <button
+              className={clsx(itemType === "material" && "active")}
+              onClick={() => {
+                setItemType("material");
+                setStock("all");
+                setActiveView("");
+                clearSelection();
+              }}
+            >
+              Raw materials
+              <span>
+                {state.products.filter((p) => typeOf(p) === "material").length}
+              </span>
+            </button>
+            <button
+              className={clsx(itemType === "finished" && "active")}
+              onClick={() => {
+                setItemType("finished");
+                setStock("all");
+                setActiveView("");
+                clearSelection();
+              }}
+            >
+              Finished goods
+              <span>
+                {state.products.filter((p) => typeOf(p) === "finished").length}
+              </span>
+            </button>
             {[
-              ["all", "All products"],
+              ["all", "All items"],
               ["attention", "Needs attention"],
               ["out", "Out of stock"],
             ].map(([id, name]) => (
               <button
                 key={id}
-                className={clsx(!activeView && stock === id && "active")}
-                onClick={() => changeStock(id)}
+                className={clsx(
+                  !activeView && itemType === "all" && stock === id && "active",
+                )}
+                onClick={() => {
+                  setItemType("all");
+                  changeStock(id);
+                }}
               >
                 <LayoutList size={14} />
                 {name}
@@ -456,9 +521,15 @@ export function InventoryWorkspace({
                 <div>
                   <span className="product-grid-category">{p.category}</span>
                   <strong>{p.name}</strong>
-                  <small>{p.sku}</small>
+                  <small>
+                    {p.sku} · {unitOf(p)}
+                  </small>
                   <div className="product-grid-foot">
-                    <span>{money(p.price)}</span>
+                    <span>
+                      {typeOf(p) === "material"
+                        ? `${money(p.cost)} / ${unitOf(p)}`
+                        : money(p.price)}
+                    </span>
                     <Status status={stockStatus(p)} />
                   </div>
                 </div>
@@ -497,7 +568,7 @@ export function InventoryWorkspace({
                         setSort(sort === "name" ? "manual" : "name")
                       }
                     >
-                      Product name
+                      Item name
                       <ArrowDownUp size={12} />
                     </button>
                   </th>
@@ -570,7 +641,9 @@ export function InventoryWorkspace({
                         <ProductArt product={p} />
                         <span>
                           <strong>{p.name}</strong>
-                          <small>{p.sku}</small>
+                          <small>
+                            {p.sku} · {unitOf(p)}
+                          </small>
                         </span>
                       </button>
                     </td>
@@ -592,7 +665,15 @@ export function InventoryWorkspace({
                               : undefined
                           }
                         >
-                          {id === "status" ? (
+                          {id === "itemType" ? (
+                            <span className="category-label">
+                              {typeOf(p) === "material"
+                                ? "Raw material"
+                                : "Finished good"}
+                            </span>
+                          ) : id === "unit" ? (
+                            unitOf(p)
+                          ) : id === "status" ? (
                             <Status status={stockStatus(p)} />
                           ) : id === "category" ? (
                             <span className="category-label">{p.category}</span>
@@ -601,7 +682,11 @@ export function InventoryWorkspace({
                           ) : id === "reserved" ? (
                             reserved(state, p.id)
                           ) : id === "price" ? (
-                            money(p.price)
+                            typeOf(p) === "material" ? (
+                              "—"
+                            ) : (
+                              money(p.price)
+                            )
                           ) : id === "cost" ? (
                             money(p.cost)
                           ) : id === "margin" ? (
@@ -665,6 +750,7 @@ export function InventoryWorkspace({
                 sort,
                 columns: [...columns],
                 layout,
+                itemType,
               };
               setPreferences({ savedViews: [...preferences.savedViews, view] });
               setActiveView(id);
@@ -786,7 +872,7 @@ export function StockAdjustment({
               defaultValue={p.stock}
               min={reserved(state, p.id)}
               max={1e9}
-              step={1}
+              step={unitOf(p) === "pcs" ? 1 : 0.000001}
               type="number"
               required
             />

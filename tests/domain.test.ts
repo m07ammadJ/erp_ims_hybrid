@@ -75,8 +75,8 @@ test("payment is idempotently guarded and paid orders cannot be cancelled", () =
 test("receiving a multi-product shipment increments every stock exactly once", () => {
   const state = createDemoState();
   const next = transition(state, { type: "receive-purchase", id: "po1" });
-  assert.equal(next.products.find((p) => p.id === "p2")!.stock, 38);
-  assert.equal(next.products.find((p) => p.id === "p5")!.stock, 25);
+  assert.equal(next.products.find((p) => p.id === "m-clay")!.stock, 170.5);
+  assert.equal(next.products.find((p) => p.id === "m-glaze")!.stock, 13.25);
   assert.equal(next.purchases[0].status, "Received");
   assert.throws(() =>
     transition(next, { type: "receive-purchase", id: "po1" }),

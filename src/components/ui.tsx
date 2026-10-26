@@ -31,13 +31,22 @@ export function Badge({
   );
 }
 export function Status({ status }: { status: string }) {
-  const tone = ["Delivered", "Received", "In stock", "Paid"].includes(status)
+  const tone = [
+    "Delivered",
+    "Received",
+    "In stock",
+    "Paid",
+    "Completed",
+    "Available",
+  ].includes(status)
     ? "green"
-    : ["Processing", "Low stock", "Ordered", "Unpaid"].includes(status)
+    : ["Processing", "Low stock", "Ordered", "Unpaid", "In progress"].includes(
+          status,
+        )
       ? "amber"
-      : ["Cancelled", "Out of stock"].includes(status)
+      : ["Cancelled", "Out of stock", "Shortage"].includes(status)
         ? "red"
-        : status === "Shipped"
+        : ["Shipped", "Planned"].includes(status)
           ? "blue"
           : "neutral";
   return <Badge tone={tone}>{status}</Badge>;

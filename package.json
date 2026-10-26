@@ -8,7 +8,7 @@
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/domain.test.ts",
+    "test": "node --import tsx --test --test-isolation=none tests/*.test.ts",
     "test:e2e": "playwright test",
     "format": "prettier --write src tests *.ts *.mjs *.json README.md",
     "format:check": "prettier --check src tests *.ts *.mjs *.json README.md"

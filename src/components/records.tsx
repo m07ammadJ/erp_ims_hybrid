@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import {
+  customerLabel,
   type Order,
   downloadCsv,
   money,
@@ -256,7 +257,7 @@ export function Orders({
                               {o.number}
                               <ArrowUpRight size={13} />
                             </span>
-                            <strong>{c.company}</strong>
+                            <strong>{customerLabel(c)}</strong>
                             <small>
                               {o.items.reduce((n, i) => n + i.quantity, 0)}{" "}
                               units · {shortDate(o.createdAt)}
@@ -300,7 +301,7 @@ export function Orders({
                           <div className="customer-cell">
                             <Avatar name={c.name} color={c.color} small />
                             <div>
-                              <strong>{c.company}</strong>
+                              <strong>{customerLabel(c)}</strong>
                               <span className="cell-subtitle">{c.name}</span>
                             </div>
                           </div>
@@ -438,16 +439,13 @@ export function Purchasing({ state, open, notify }: ViewProps) {
           onClick={() => setTab("Ordered")}
         />
         <Metric
-          title="Incoming units"
+          title="Incoming input lines"
           value={number(
             state.purchases
               .filter((p) => p.status === "Ordered")
-              .reduce(
-                (n, p) => n + p.items.reduce((s, i) => s + i.quantity, 0),
-                0,
-              ),
+              .reduce((n, p) => n + p.items.length, 0),
           )}
-          description="a little more room to grow"
+          description="each tracked in its own base unit"
           onClick={() => setTab("Ordered")}
         />
         <Metric
@@ -498,7 +496,7 @@ export function Purchasing({ state, open, notify }: ViewProps) {
                   <th>Supplier</th>
                   <th>Expected arrival</th>
                   <th>Status</th>
-                  <th className="align-right">Units</th>
+                  <th className="align-right">Input lines</th>
                   <th className="align-right">Total</th>
                   <th />
                 </tr>
@@ -527,9 +525,7 @@ export function Purchasing({ state, open, notify }: ViewProps) {
                     <td>
                       <Status status={p.status} />
                     </td>
-                    <td className="align-right">
-                      {p.items.reduce((n, i) => n + i.quantity, 0)}
-                    </td>
+                    <td className="align-right">{p.items.length}</td>
                     <td className="align-right amount">{money(total(p))}</td>
                     <td>
                       <ArrowUpRight className="row-arrow" size={14} />
@@ -560,7 +556,7 @@ export function Purchasing({ state, open, notify }: ViewProps) {
 export function Customers({ state, open, notify }: ViewProps) {
   const [search, setSearch] = useState("");
   const customers = state.customers.filter((c) =>
-    `${c.name} ${c.company} ${c.email}`
+    `${c.name} ${customerLabel(c)} ${c.email}`
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
@@ -589,7 +585,7 @@ export function Customers({ state, open, notify }: ViewProps) {
                   );
                   return [
                     c.name,
-                    c.company,
+                    customerLabel(c),
                     c.email,
                     orders.length,
                     orders.reduce((n, o) => n + total(o), 0),
@@ -638,8 +634,16 @@ export function Customers({ state, open, notify }: ViewProps) {
                   <Avatar name={c.name} color={c.color} />
                   <ArrowUpRight size={16} />
                 </div>
-                <h3>{c.company}</h3>
-                <p>{c.name}</p>
+                <h3>{customerLabel(c)}</h3>
+                <p>
+                  {c.company && c.company !== c.name
+                    ? c.name
+                    : c.entityType === "individual"
+                      ? "Individual customer"
+                      : c.entityType === "other"
+                        ? "Other entity"
+                        : "Business / organization"}
+                </p>
                 <span className="customer-email">
                   <Mail size={13} />
                   {c.email}
@@ -668,7 +672,10 @@ export function Customers({ state, open, notify }: ViewProps) {
       )}
       <div className="people-note">
         <Users size={17} />
-        <span>Behind every order is a good connection. Keep yours close.</span>
+        <span>
+          Customers can be individuals, businesses, organizations, or other
+          entities.
+        </span>
       </div>
     </div>
   );
